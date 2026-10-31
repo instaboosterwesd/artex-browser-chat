@@ -41,11 +41,20 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton asChild>
-              <Link prefetch={false} href="/function/tasks">
+            {/* size=lg → collapsed icon mode uses p-0 so the logo is not squashed inside size-8+padding */}
+            <SidebarMenuButton asChild size="lg" className="data-[slot=sidebar-menu-button]:gap-2">
+              <Link prefetch={false} href="/function/tasks" className="justify-start">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/logo.png" alt={APP_CONFIG.name} width={40} height={40} className="size-8 shrink-0 rounded-full object-cover" />
-                <span className="font-semibold text-base tracking-tight">{APP_CONFIG.name}</span>
+                <img
+                  src="/logo.png"
+                  alt={APP_CONFIG.name}
+                  width={32}
+                  height={32}
+                  className="size-8 max-h-8 max-w-8 min-h-8 min-w-8 shrink-0 rounded-full object-cover"
+                />
+                <span className="truncate font-semibold text-base tracking-tight group-data-[collapsible=icon]:hidden">
+                  {APP_CONFIG.name}
+                </span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>

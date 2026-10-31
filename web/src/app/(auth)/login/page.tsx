@@ -95,7 +95,7 @@ export default function LoginPage() {
           <div className="absolute size-60 rounded-full border border-primary-foreground/15" />
           <div className="absolute size-40 rounded-full border border-primary-foreground/20" />
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.png" alt="bypass" width={160} height={160} className="relative rounded-full object-cover shadow-lg" />
+          <img src="/logo.png" alt="reverse bypass" width={160} height={160} className="relative rounded-full object-cover shadow-lg" />
         </div>
       </div>
 
@@ -104,12 +104,12 @@ export default function LoginPage() {
         <div className="w-full max-w-md space-y-10 py-24 lg:py-32">
           <div className="space-y-4 text-center">
             <h2 className="text-2xl font-medium tracking-tight">Sign in</h2>
-            <p className="mx-auto max-w-xl text-muted-foreground">Welcome back — enter your password to continue using bypass</p>
+            <p className="mx-auto max-w-xl text-muted-foreground">Welcome back — enter your password to continue using reverse bypass</p>
           </div>
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <div className="space-y-1.5">
               <Label htmlFor="username">Username</Label>
-              <Input id="username" value="bypass" readOnly className="bg-muted text-muted-foreground" />
+              <Input id="username" value="reverse bypass" readOnly className="bg-muted text-muted-foreground" />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="password">Password</Label>

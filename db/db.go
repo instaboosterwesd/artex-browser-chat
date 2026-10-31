@@ -364,6 +364,7 @@ var builtinSkillVisibility = map[string][]string{
 	"browser-use":    {"auto", "mainagent", "pentest", "worker", "planner"},
 	"browser-skill":  {"auto", "mainagent", "pentest", "worker", "planner"},
 	"playwright-cli": {"auto", "mainagent", "pentest", "worker", "planner"},
+	"agent-manager":  {"auto"},
 }
 
 // seedBuiltinSkillVisibility binds the shipped built-in skills to their default

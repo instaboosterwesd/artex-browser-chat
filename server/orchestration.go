@@ -509,6 +509,7 @@ func (s *Server) seedOrchestrationTools() {
 	s.reseedMainAgentPrompt()         // mainagent prompt gains "after goals are met, ask via add_intent whether to register a goal" (one-time)
 	s.reseedPlannerPrompt()           // planner prompt: rewrites the "zero intents" justification rules + adds quantitative acceptance checks (one-time)
 	s.reseedWorkerPrompt()            // worker prompt: adds the evidence bar for negative conclusions (one-time)
+	s.reseedAutoPrompt()              // auto prompt: chat-driven agent create/update/skills/LLM (one-time)
 	s.seedReporterAgent()             // seeds the "report writer" agent + tool bindings + finding trigger (one-time)
 	s.upgradeReporterTriggerMessage() // backfill migration for old DBs: makes the reporter send evidence_version back (one-time)
 	s.seedFindingTrafficTools()       // adds optional evidence params and read-only evidence tools, preserving user config
@@ -524,7 +525,7 @@ func (s *Server) seedOrchestrationTools() {
 // reaches an old DB otherwise. Preserves each tool's agent binding + enabled flag.
 // Bump the flag whenever these tools' schemas/descriptions change in code.
 func (s *Server) refreshBuiltinToolSchemas() {
-	const flag = "tool_schema_refresh_v7_list_facts_paging"
+	const flag = "tool_schema_refresh_v9_agent_git_delete"
 	if v, _, _ := s.m.pg.GetSetting(flag); v == "true" {
 		return
 	}
@@ -571,6 +572,33 @@ func (s *Server) unbindGoalMetDefault() {
 		return
 	}
 	_ = s.m.pg.SetSetting(flag, "true")
+}
+
+// reseedAutoPrompt refreshes the Auto platform-operator prompt when agent-management
+// tools are added (create_agent / set_agent_skills / set_agent_llm). Same one-time
+// ResetPromptToDefault pattern as the other reseed* helpers.
+func (s *Server) reseedAutoPrompt() {
+	const flag = "auto_prompt_agent_mgmt_v2"
+	if v, _, _ := s.m.pg.GetSetting(flag); v == "true" {
+		return
+	}
+	defer func() { _ = s.m.pg.SetSetting(flag, "true") }()
+	a, err := s.m.pg.GetAgentByKey("auto")
+	if err != nil || a == nil {
+		return
+	}
+	tmpl := agent.BuiltinPromptSeeds()["auto"]
+	if tmpl == "" {
+		return
+	}
+	if cur, err := s.m.pg.CurrentPrompt(a.ID); err == nil && cur == tmpl {
+		return
+	}
+	if _, err := s.m.pg.ResetPromptToDefault(a.ID, tmpl); err != nil {
+		log.Printf("[prompts] failed to refresh auto prompt: %v", err)
+		return
+	}
+	log.Printf("[prompts] auto prompt: appended agent-management default version (one-time)")
 }
 
 // reseedGoalsPrompt refreshes the goals decomposer's prompt to [the current code default] — the default body gained the step
@@ -929,7 +957,7 @@ func (s *Server) seedWorkerReadbackRebind() {
 // before Auto existed still give Auto its default toolset — without re-adding it
 // after a user deliberately unbinds.
 func (s *Server) seedAutoDefaultBindings() {
-	const flag = "auto_default_bindings_v3" // v3: replaces old asset tool names, adds insert_assets/add_company_scope
+	const flag = "auto_default_bindings_v5" // v5: delete_agent, add_agent_skills, install_skill_from_git
 	if v, _, _ := s.m.pg.GetSetting(flag); v == "true" {
 		return
 	}

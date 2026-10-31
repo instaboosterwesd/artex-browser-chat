@@ -5,11 +5,13 @@ import Link from "next/link";
 import { toast } from "sonner";
 import {
   CheckCircle2Icon,
+  ExternalLinkIcon,
   Loader2Icon,
   PlugIcon,
   PlusIcon,
   RefreshCwIcon,
   Settings2Icon,
+  UnplugIcon,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +30,12 @@ import { Label } from "@/components/ui/label";
 import { api } from "@/lib/api";
 import type { MCPServer } from "@/lib/types";
 
+const OPEN_CONNECTOR_MCP_NAME = "open-connector";
+const OPEN_CONNECTOR_MCP_URL = "http://127.0.0.1:3000/mcp";
+const OPEN_CONNECTOR_CONSOLE = "/open-connector/";
+const OPEN_CONNECTOR_HEALTH = "/open-connector/health";
+const OPEN_CONNECTOR_PROVIDERS = "/open-connector/v1/providers";
+
 type Preset = {
   id: string;
   name: string;
@@ -37,180 +45,28 @@ type Preset = {
   command: string;
   args: string[];
   envKeys: { key: string; label: string; placeholder?: string; secret?: boolean }[];
-  docs?: string;
 };
 
-/** One-click MCP connection catalog (stdio via npx). */
-const PRESETS: Preset[] = [
+/** Direct MCP fallbacks (when you want a single app without OpenConnector). */
+const DIRECT_PRESETS: Preset[] = [
   {
-    id: "telegram",
-    name: "telegram",
-    title: "Telegram",
-    description: "Send and read Telegram bot messages — perfect for daily workflow digests.",
-    category: "Messaging",
+    id: "browser",
+    name: "browser",
+    title: "Playwright Browser",
+    description: "Built-in headed Chrome via CDP (already used by Live Browser / chat).",
+    category: "Direct MCP",
     command: "npx",
-    args: ["-y", "@chigwell/telegram-mcp"],
-    envKeys: [
-      { key: "TELEGRAM_API_ID", label: "API ID", placeholder: "from my.telegram.org" },
-      { key: "TELEGRAM_API_HASH", label: "API Hash", secret: true },
-      { key: "TELEGRAM_SESSION_STRING", label: "Session string", secret: true },
-    ],
-  },
-  {
-    id: "slack",
-    name: "slack",
-    title: "Slack",
-    description: "Post messages and read channels via Slack MCP.",
-    category: "Messaging",
-    command: "npx",
-    args: ["-y", "@modelcontextprotocol/server-slack"],
-    envKeys: [
-      { key: "SLACK_BOT_TOKEN", label: "Bot token", placeholder: "xoxb-…", secret: true },
-      { key: "SLACK_TEAM_ID", label: "Team ID", placeholder: "T0…" },
-    ],
-  },
-  {
-    id: "discord",
-    name: "discord",
-    title: "Discord",
-    description: "Interact with Discord servers and channels.",
-    category: "Messaging",
-    command: "npx",
-    args: ["-y", "@hanweg/mcp-discord"],
-    envKeys: [{ key: "DISCORD_TOKEN", label: "Bot token", secret: true }],
-  },
-  {
-    id: "github",
-    name: "github",
-    title: "GitHub",
-    description: "Repos, issues, PRs, and repository operations.",
-    category: "Dev",
-    command: "npx",
-    args: ["-y", "@modelcontextprotocol/server-github"],
-    envKeys: [{ key: "GITHUB_PERSONAL_ACCESS_TOKEN", label: "Personal access token", secret: true }],
-  },
-  {
-    id: "brave-search",
-    name: "brave-search",
-    title: "Brave Search",
-    description: "Web search for research workflows.",
-    category: "Search",
-    command: "npx",
-    args: ["-y", "@modelcontextprotocol/server-brave-search"],
-    envKeys: [{ key: "BRAVE_API_KEY", label: "Brave API key", secret: true }],
-  },
-  {
-    id: "memory",
-    name: "memory",
-    title: "Memory",
-    description: "Persistent knowledge graph memory across chats.",
-    category: "Data",
-    command: "npx",
-    args: ["-y", "@modelcontextprotocol/server-memory"],
+    args: ["-y", "@playwright/mcp", "--cdp-endpoint", "http://127.0.0.1:9222", "--caps", "vision"],
     envKeys: [],
   },
   {
     id: "filesystem",
     name: "filesystem",
     title: "Filesystem",
-    description: "Read/write files under an allowed directory.",
-    category: "Data",
+    description: "Read/write files under the workspace directory.",
+    category: "Direct MCP",
     command: "npx",
     args: ["-y", "@modelcontextprotocol/server-filesystem", "/home/hgdfsjgfjf/ARTEX"],
-    envKeys: [],
-  },
-  {
-    id: "postgres",
-    name: "postgres",
-    title: "PostgreSQL",
-    description: "Query your database (read carefully — grant least privilege).",
-    category: "Data",
-    command: "npx",
-    args: ["-y", "@modelcontextprotocol/server-postgres"],
-    envKeys: [{ key: "POSTGRES_CONNECTION_STRING", label: "Connection string", secret: true }],
-  },
-  {
-    id: "fetch",
-    name: "fetch",
-    title: "Fetch",
-    description: "HTTP fetch for APIs and web pages.",
-    category: "Web",
-    command: "npx",
-    args: ["-y", "@modelcontextprotocol/server-fetch"],
-    envKeys: [],
-  },
-  {
-    id: "puppeteer",
-    name: "puppeteer",
-    title: "Puppeteer",
-    description: "Browser automation (alternate to the built-in Playwright browser MCP).",
-    category: "Web",
-    command: "npx",
-    args: ["-y", "@modelcontextprotocol/server-puppeteer"],
-    envKeys: [],
-  },
-  {
-    id: "notion",
-    name: "notion",
-    title: "Notion",
-    description: "Read and write Notion pages/databases.",
-    category: "Productivity",
-    command: "npx",
-    args: ["-y", "@suekou/mcp-notion-server"],
-    envKeys: [{ key: "NOTION_API_TOKEN", label: "Notion integration token", secret: true }],
-  },
-  {
-    id: "gmail",
-    name: "gmail",
-    title: "Gmail",
-    description: "Read and send Gmail (OAuth credentials required).",
-    category: "Messaging",
-    command: "npx",
-    args: ["-y", "@gongrzhe/server-gmail-autoauth-mcp"],
-    envKeys: [],
-  },
-  {
-    id: "google-calendar",
-    name: "google-calendar",
-    title: "Google Calendar",
-    description: "List and create calendar events.",
-    category: "Productivity",
-    command: "npx",
-    args: ["-y", "@cocal/google-calendar-mcp"],
-    envKeys: [{ key: "GOOGLE_OAUTH_CREDENTIALS", label: "OAuth credentials path / JSON", secret: true }],
-  },
-  {
-    id: "linear",
-    name: "linear",
-    title: "Linear",
-    description: "Issues and projects in Linear.",
-    category: "Dev",
-    command: "npx",
-    args: ["-y", "@tacticlaunch/mcp-linear"],
-    envKeys: [{ key: "LINEAR_API_KEY", label: "Linear API key", secret: true }],
-  },
-  {
-    id: "jira",
-    name: "jira",
-    title: "Jira",
-    description: "Jira Cloud issues and projects.",
-    category: "Dev",
-    command: "npx",
-    args: ["-y", "@nexus2520/jira-mcp-server"],
-    envKeys: [
-      { key: "JIRA_URL", label: "Jira URL", placeholder: "https://xxx.atlassian.net" },
-      { key: "JIRA_EMAIL", label: "Email" },
-      { key: "JIRA_API_TOKEN", label: "API token", secret: true },
-    ],
-  },
-  {
-    id: "sqlite",
-    name: "sqlite",
-    title: "SQLite",
-    description: "Query a local SQLite database file.",
-    category: "Data",
-    command: "npx",
-    args: ["-y", "@modelcontextprotocol/server-sqlite", "--db-path", "/tmp/data.db"],
     envKeys: [],
   },
 ];
@@ -266,7 +122,9 @@ function ConnectDialog({
     <Dialog open={!!preset} onOpenChange={(o) => !o && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{existing ? "Update" : "Connect"} {preset.title}</DialogTitle>
+          <DialogTitle>
+            {existing ? "Update" : "Connect"} {preset.title}
+          </DialogTitle>
           <DialogDescription>{preset.description}</DialogDescription>
         </DialogHeader>
         <div className="grid gap-3 py-1">
@@ -286,9 +144,6 @@ function ConnectDialog({
               </div>
             ))
           )}
-          <p className="text-muted-foreground font-mono text-[10px]">
-            {preset.command} {preset.args.join(" ")}
-          </p>
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={onClose}>
@@ -307,6 +162,11 @@ function ConnectDialog({
 export default function ConnectionsPage() {
   const [servers, setServers] = React.useState<MCPServer[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [connectorUp, setConnectorUp] = React.useState<boolean | null>(null);
+  const [providerCount, setProviderCount] = React.useState<number | null>(null);
+  const [actionCount, setActionCount] = React.useState<number | null>(null);
+  const [attaching, setAttaching] = React.useState(false);
+  const [runtimeToken, setRuntimeToken] = React.useState("");
   const [active, setActive] = React.useState<Preset | null>(null);
 
   const reload = React.useCallback(() => {
@@ -318,9 +178,37 @@ export default function ConnectionsPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  const pingConnector = React.useCallback(async () => {
+    try {
+      const health = await fetch(OPEN_CONNECTOR_HEALTH, { cache: "no-store" });
+      if (!health.ok) throw new Error(String(health.status));
+      setConnectorUp(true);
+      try {
+        const res = await fetch(OPEN_CONNECTOR_PROVIDERS, { cache: "no-store" });
+        if (res.ok) {
+          const body = (await res.json()) as { data?: unknown[] };
+          const list = Array.isArray(body.data) ? body.data : [];
+          setProviderCount(list.length);
+          setActionCount(null);
+        } else {
+          setProviderCount(null);
+          setActionCount(null);
+        }
+      } catch {
+        setProviderCount(null);
+        setActionCount(null);
+      }
+    } catch {
+      setConnectorUp(false);
+      setProviderCount(null);
+      setActionCount(null);
+    }
+  }, []);
+
   React.useEffect(() => {
     reload();
-  }, [reload]);
+    void pingConnector();
+  }, [reload, pingConnector]);
 
   const byName = React.useMemo(() => {
     const m = new Map<string, MCPServer>();
@@ -328,10 +216,51 @@ export default function ConnectionsPage() {
     return m;
   }, [servers]);
 
-  const categories = React.useMemo(() => {
-    const set = new Set(PRESETS.map((p) => p.category));
-    return [...set];
-  }, []);
+  const openConnectorMcp = byName.get(OPEN_CONNECTOR_MCP_NAME);
+
+  async function attachOpenConnector() {
+    setAttaching(true);
+    try {
+      const env: Record<string, string> = {};
+      if (runtimeToken.trim()) {
+        env.Authorization = `Bearer ${runtimeToken.trim()}`;
+      }
+      await api.saveMcpServer({
+        id: openConnectorMcp?.id,
+        name: OPEN_CONNECTOR_MCP_NAME,
+        transport: "http",
+        url: OPEN_CONNECTOR_MCP_URL,
+        command: "",
+        args: [],
+        env,
+        enabled: true,
+      });
+      toast.success("Open Connector attached as MCP — agents can search_actions / execute_action");
+      reload();
+      try {
+        const id = openConnectorMcp?.id;
+        if (id) await api.refreshMcpServer(id);
+      } catch {
+        /* refresh optional until first use */
+      }
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setAttaching(false);
+    }
+  }
+
+  async function detachOpenConnector() {
+    if (!openConnectorMcp) return;
+    if (!window.confirm("Detach Open Connector MCP from ARTEX?")) return;
+    try {
+      await api.deleteMcpServer(openConnectorMcp.id);
+      toast.success("Detached");
+      reload();
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
 
   return (
     <div className="flex flex-1 flex-col gap-4 md:gap-6">
@@ -339,38 +268,138 @@ export default function ConnectionsPage() {
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Connections</h1>
           <p className="text-muted-foreground text-sm">
-            Connect MCP apps (Telegram, Slack, GitHub, …) so Workflows and Auto can use them. Advanced config also lives under{" "}
-            <Link href="/system/mcp" className="underline">
-              System → MCP
-            </Link>
-            .
+            Powered by{" "}
+            <a
+              href="https://github.com/oomol-lab/open-connector"
+              target="_blank"
+              rel="noreferrer"
+              className="underline"
+            >
+              Open Connector
+            </a>{" "}
+            (open source) — connect Telegram, Gmail, Slack, GitHub and 1,000+ apps once, then use them from Workflows and Auto via MCP.
           </p>
         </div>
-        <Button size="sm" variant="outline" onClick={reload} disabled={loading}>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => {
+            reload();
+            void pingConnector();
+          }}
+          disabled={loading}
+        >
           <RefreshCwIcon className={loading ? "animate-spin" : undefined} />
           Refresh
         </Button>
       </div>
 
-      <Card>
+      <Card className="border-primary/30">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <PlugIcon className="size-4" /> Active connections
+          <CardTitle className="flex flex-wrap items-center gap-2">
+            <PlugIcon className="size-4" /> Open Connector
+            {connectorUp === true && (
+              <Badge variant="secondary" className="gap-1 text-[10px]">
+                <CheckCircle2Icon className="size-3 text-emerald-600" /> Online
+              </Badge>
+            )}
+            {connectorUp === false && (
+              <Badge variant="outline" className="text-destructive text-[10px]">
+                Offline
+              </Badge>
+            )}
+            {connectorUp === null && (
+              <Badge variant="outline" className="text-[10px]">
+                Checking…
+              </Badge>
+            )}
           </CardTitle>
           <CardDescription>
-            {servers.length === 0 ? "None yet" : `${servers.length} MCP server(s)`}
+            Self-hosted gateway from{" "}
+            <span className="font-mono text-[11px]">oomol-lab/open-connector</span>
+            {providerCount != null && actionCount != null
+              ? ` · ${providerCount} providers · ${actionCount} actions`
+              : ""}
+            . Open the console to OAuth / API-key apps, then attach MCP so agents can call them.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          {connectorUp === false && (
+            <p className="text-muted-foreground rounded-md border border-dashed p-3 text-sm">
+              Runtime not reachable on <span className="font-mono">:3000</span>. Start it:
+              <code className="bg-muted mt-2 block rounded px-2 py-1 font-mono text-xs">
+                bash scripts/start-open-connector.sh
+              </code>
+            </p>
+          )}
+
+          <div className="grid gap-1.5 sm:max-w-md">
+            <Label htmlFor="runtime-token">Runtime token (optional)</Label>
+            <Input
+              id="runtime-token"
+              type="password"
+              placeholder="Paste OOMOL_CONNECT_RUNTIME_TOKEN if auth is enabled"
+              value={runtimeToken}
+              onChange={(e) => setRuntimeToken(e.target.value)}
+            />
+            <p className="text-muted-foreground text-[11px]">
+              Stored as MCP <span className="font-mono">Authorization</span> header. Leave empty for open local runtimes.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <Button asChild variant="outline" size="sm" disabled={connectorUp === false}>
+              <a href={OPEN_CONNECTOR_CONSOLE} target="_blank" rel="noreferrer">
+                <ExternalLinkIcon data-icon="inline-start" />
+                Open console
+              </a>
+            </Button>
+            <Button size="sm" onClick={() => void attachOpenConnector()} disabled={attaching || connectorUp === false}>
+              {attaching ? <Loader2Icon className="animate-spin" /> : <PlusIcon data-icon="inline-start" />}
+              {openConnectorMcp ? "Re-attach MCP" : "Attach as MCP"}
+            </Button>
+            {openConnectorMcp && (
+              <Button size="sm" variant="ghost" onClick={() => void detachOpenConnector()}>
+                <UnplugIcon data-icon="inline-start" />
+                Detach
+              </Button>
+            )}
+            <Button asChild size="sm" variant="ghost">
+              <Link href="/system/mcp">Advanced MCP list</Link>
+            </Button>
+          </div>
+
+          {openConnectorMcp && (
+            <div className="text-muted-foreground flex flex-wrap items-center gap-2 text-xs">
+              <Badge variant="secondary" className="gap-1">
+                <CheckCircle2Icon className="size-3" /> MCP linked
+              </Badge>
+              <span className="font-mono">
+                {openConnectorMcp.transport} · {openConnectorMcp.url || OPEN_CONNECTOR_MCP_URL}
+              </span>
+              <span>Ask Auto: search_actions / execute_action (e.g. Telegram, Gmail)</span>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Active MCP servers</CardTitle>
+          <CardDescription>
+            {servers.length === 0 ? "None yet" : `${servers.length} server(s) visible to agents`}
           </CardDescription>
         </CardHeader>
         <CardContent>
           {servers.length === 0 ? (
-            <p className="text-muted-foreground text-sm">Pick a service below to connect.</p>
+            <p className="text-muted-foreground text-sm">Attach Open Connector or a direct MCP below.</p>
           ) : (
             <div className="flex flex-wrap gap-2">
               {servers.map((s) => (
                 <Badge key={s.id} variant={s.enabled ? "secondary" : "outline"} className="gap-1">
                   {s.enabled ? <CheckCircle2Icon className="size-3 text-emerald-600" /> : null}
                   {s.name}
-                  <span className="text-muted-foreground font-mono text-[9px]">#{s.id}</span>
+                  <span className="text-muted-foreground font-mono text-[9px]">{s.transport}</span>
                 </Badge>
               ))}
             </div>
@@ -378,44 +407,43 @@ export default function ConnectionsPage() {
         </CardContent>
       </Card>
 
-      {categories.map((cat) => (
-        <div key={cat} className="space-y-3">
-          <h2 className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">{cat}</h2>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {PRESETS.filter((p) => p.category === cat).map((p) => {
-              const existing = byName.get(p.name);
-              return (
-                <div key={p.id} className="flex flex-col gap-3 rounded-lg border p-4">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <div className="text-sm font-medium">{p.title}</div>
-                      <p className="text-muted-foreground mt-1 text-xs">{p.description}</p>
-                    </div>
-                    {existing ? (
-                      <Badge variant="secondary" className="shrink-0 gap-1 text-[10px]">
-                        <CheckCircle2Icon className="size-3" /> Connected
-                      </Badge>
-                    ) : null}
+      <div className="space-y-3">
+        <h2 className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">Direct MCP (optional)</h2>
+        <p className="text-muted-foreground text-xs">
+          Prefer Open Connector for SaaS apps. Use these only for local/browser extras.
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {DIRECT_PRESETS.map((p) => {
+            const existing = byName.get(p.name);
+            return (
+              <div key={p.id} className="flex flex-col gap-3 rounded-lg border p-4">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="text-sm font-medium">{p.title}</div>
+                    <p className="text-muted-foreground mt-1 text-xs">{p.description}</p>
                   </div>
-                  <div className="mt-auto flex gap-2">
-                    <Button size="sm" className="flex-1" onClick={() => setActive(p)}>
-                      {existing ? (
-                        <>
-                          <Settings2Icon data-icon="inline-start" /> Configure
-                        </>
-                      ) : (
-                        <>
-                          <PlusIcon data-icon="inline-start" /> Connect
-                        </>
-                      )}
-                    </Button>
-                  </div>
+                  {existing ? (
+                    <Badge variant="secondary" className="shrink-0 gap-1 text-[10px]">
+                      <CheckCircle2Icon className="size-3" /> On
+                    </Badge>
+                  ) : null}
                 </div>
-              );
-            })}
-          </div>
+                <Button size="sm" className="mt-auto" onClick={() => setActive(p)}>
+                  {existing ? (
+                    <>
+                      <Settings2Icon data-icon="inline-start" /> Configure
+                    </>
+                  ) : (
+                    <>
+                      <PlusIcon data-icon="inline-start" /> Connect
+                    </>
+                  )}
+                </Button>
+              </div>
+            );
+          })}
         </div>
-      ))}
+      </div>
 
       <ConnectDialog
         preset={active}

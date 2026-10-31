@@ -68,6 +68,7 @@ benchmark-results/
 # local browser stack / build artifacts
 scripts/node_modules/
 .env.browser
+scripts/open-connector.env
 artex.log
 *.log
 /artex-0.4.0-linux-amd64/

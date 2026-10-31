@@ -6,6 +6,7 @@ export DISPLAY=:99
 export NPM_CONFIG_PREFIX="$HOME/.local"
 
 bash ./scripts/start-browser-stack.sh
+bash ./scripts/start-open-connector.sh || echo "[warn] Open Connector failed to start (Connections → Open Connector)"
 
 PROFILE="$HOME/.artex-browser/cdp-profile"
 mkdir -p "$PROFILE"

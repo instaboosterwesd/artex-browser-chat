@@ -14,6 +14,7 @@ const { URL } = require("url");
 const LISTEN = Number(process.env.ARTEX_GATEWAY_PORT || 8790);
 const ARTEX = process.env.ARTEX_UPSTREAM || "http://127.0.0.1:8787";
 const BRIDGE = process.env.BROWSER_BRIDGE_UPSTREAM || "http://127.0.0.1:9223";
+const CONNECTOR = process.env.OPEN_CONNECTOR_UPSTREAM || "http://127.0.0.1:3000";
 const STATIC_ROOT =
   process.env.ARTEX_STATIC_ROOT ||
   path.resolve(__dirname, "../web/out");
@@ -107,6 +108,15 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // OpenConnector console + MCP + OpenAPI (oomol-lab/open-connector)
+  if (u.pathname === "/open-connector" || u.pathname.startsWith("/open-connector/")) {
+    let rest = u.pathname.replace(/^\/open-connector/, "") || "/";
+    if (!rest.startsWith("/")) rest = "/" + rest;
+    req.url = rest + u.search;
+    proxy.web(req, res, { target: CONNECTOR });
+    return;
+  }
+
   if (u.pathname.startsWith("/api/") || u.pathname === "/api") {
     proxy.web(req, res, { target: ARTEX });
     return;
@@ -131,5 +141,7 @@ server.on("upgrade", (req, socket, head) => {
 });
 
 server.listen(LISTEN, "0.0.0.0", () => {
-  console.log(`[gateway] :${LISTEN}  static=${STATIC_ROOT}  artex=${ARTEX}  bridge=${BRIDGE}`);
+  console.log(
+    `[gateway] :${LISTEN}  static=${STATIC_ROOT}  artex=${ARTEX}  bridge=${BRIDGE}  connector=${CONNECTOR}`,
+  );
 });

@@ -38,7 +38,9 @@ export const auth = {
       // base64url → base64
       const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
       const username: string = payload.sub ?? "ARTEX";
-      return { id: "1", name: username, username, email: "", avatar: "", role: "operator" };
+      // Account login id stays ARTEX; UI brand display name is bypass.
+      const display = username === "ARTEX" || username.toLowerCase() === "artex" ? "bypass" : username;
+      return { id: "1", name: display, username, email: "", avatar: "/logo.png", role: "operator" };
     } catch {
       return null;
     }

@@ -3,11 +3,11 @@ import packageJson from "../../package.json";
 const currentYear = new Date().getFullYear();
 
 export const APP_CONFIG = {
-  name: "ARTEX",
+  name: "bypass",
   version: packageJson.version,
-  copyright: `© ${currentYear}, ARTEX.`,
+  copyright: `© ${currentYear}, bypass.`,
   meta: {
-    title: "ARTEX — Autonomous Penetration Testing Console",
+    title: "bypass — Autonomous Penetration Testing Console",
     description: "Console for the LLM-driven autonomous penetration testing system",
   },
 };

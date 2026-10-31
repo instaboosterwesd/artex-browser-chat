@@ -53,6 +53,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
+import { useLiveAgents } from "@/hooks/use-live-agents";
 import { useSideQuestions } from "@/hooks/use-side-questions";
 import { mergeActivities } from "@/lib/activity-merge";
 import { api } from "@/lib/api";
@@ -380,9 +381,12 @@ function DraftChat({
   const [sending, setSending] = React.useState(false);
   const [uploading, setUploading] = React.useState(false);
 
-  // default the agent to Auto once agents load.
+  // Default to Auto once agents load; if the picked agent was deleted live, fall back.
   React.useEffect(() => {
-    if (!agentKey && agents.some((a) => a.key === "auto")) setAgentKey("auto");
+    if (agents.length === 0) return;
+    if (agentKey && agents.some((a) => a.key === agentKey)) return;
+    if (agents.some((a) => a.key === "auto")) setAgentKey("auto");
+    else setAgentKey(agents[0]?.key ?? "");
   }, [agentKey, agents]);
 
   const agent = agents.find((a) => a.key === agentKey);
@@ -1046,7 +1050,7 @@ function AgentGroupHeader({
 }
 
 export default function ChatPage() {
-  const [agents, setAgents] = React.useState<Agent[]>([]);
+  const { agents } = useLiveAgents();
   const [profiles, setProfiles] = React.useState<LLMProfile[]>([]);
   const [convs, setConvs] = React.useState<Conversation[]>([]);
   const [agentFilter, setAgentFilter] = React.useState<string | null>(null);
@@ -1095,18 +1099,19 @@ export default function ChatPage() {
   }, []);
   React.useEffect(() => {
     api
-      .agents()
-      .then(setAgents)
-      .catch(() => {
-        /* Agent metadata is optional for rendering an existing conversation. */
-      });
-    api
       .llmProfiles()
       .then(setProfiles)
       .catch(() => {
         /* The conversation remains usable without profile labels. */
       });
   }, []);
+
+  // Clear sidebar agent filter if that agent was deleted live.
+  React.useEffect(() => {
+    if (agentFilter && agents.length > 0 && !agents.some((a) => a.key === agentFilter)) {
+      setAgentFilter(null);
+    }
+  }, [agents, agentFilter]);
 
   // One list poll supplies runtime state for all sidebar rows, including the
   // unselected ones. Await completion so slow requests do not overlap.

@@ -39,6 +39,7 @@ import {
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { AgentEditor } from "@/components/agent-editor";
 import { api } from "@/lib/api";
+import { useLiveAgents } from "@/hooks/use-live-agents";
 import type { Agent } from "@/lib/types";
 
 // AgentGridCard is one clickable tile opening the agent's editor drawer. Custom
@@ -207,15 +208,15 @@ function CreateAgentDialog({ onCreated }: { onCreated: (key: string) => void }) 
 }
 
 export default function AgentsPage() {
-  const [agents, setAgents] = React.useState<Agent[]>([]);
+  const { agents, reload } = useLiveAgents();
   const [editKey, setEditKey] = React.useState<string | null>(null);
 
-  const reload = React.useCallback(() => {
-    api.agents().then(setAgents).catch(() => setAgents([]));
-  }, []);
+  // If Auto (or another tab) deletes the agent open in the sheet, close it.
   React.useEffect(() => {
-    reload();
-  }, [reload]);
+    if (editKey && agents.length > 0 && !agents.some((a) => a.key === editKey)) {
+      setEditKey(null);
+    }
+  }, [agents, editKey]);
 
   const editing = agents.find((a) => a.key === editKey) ?? null;
 

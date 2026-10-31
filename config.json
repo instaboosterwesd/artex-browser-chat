@@ -1,0 +1,11 @@
+{
+  "database": {
+    "host": "127.0.0.1",
+    "port": 5432,
+    "user": "artex",
+    "password": "artex_secure_password_2026",
+    "dbname": "artex",
+    "sslmode": "disable"
+  },
+  "skill_dir": "/home/hgdfsjgfjf/ARTEX/skills"
+}

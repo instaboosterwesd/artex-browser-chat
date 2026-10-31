@@ -578,7 +578,7 @@ func (s *Server) unbindGoalMetDefault() {
 // tools are added (create_agent / set_agent_skills / set_agent_llm). Same one-time
 // ResetPromptToDefault pattern as the other reseed* helpers.
 func (s *Server) reseedAutoPrompt() {
-	const flag = "auto_prompt_agent_mgmt_v2"
+	const flag = "auto_prompt_agent_mgmt_v3" // v3: workflows
 	if v, _, _ := s.m.pg.GetSetting(flag); v == "true" {
 		return
 	}
@@ -957,7 +957,7 @@ func (s *Server) seedWorkerReadbackRebind() {
 // before Auto existed still give Auto its default toolset — without re-adding it
 // after a user deliberately unbinds.
 func (s *Server) seedAutoDefaultBindings() {
-	const flag = "auto_default_bindings_v5" // v5: delete_agent, add_agent_skills, install_skill_from_git
+	const flag = "auto_default_bindings_v6" // v6: workflow CRUD + run tools
 	if v, _, _ := s.m.pg.GetSetting(flag); v == "true" {
 		return
 	}

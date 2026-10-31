@@ -691,6 +691,25 @@ export interface TaskLLMResolutions {
   worker: TaskLLMResolution;
 }
 
+// ---- Workflows (n8n-style scheduled agent automations) ----
+export interface Workflow {
+  id: number;
+  name: string;
+  description: string;
+  agent_key: string;
+  enabled: boolean;
+  schedule_kind: "manual" | "interval" | "daily";
+  interval_sec: number;
+  daily_hour: number;
+  daily_minute: number;
+  timezone: string;
+  prompt: string;
+  graph_json: string;
+  last_fire?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 // ---- Agent triggers (P3 scheduling, custom agents only) ----
 export interface AgentTrigger {
   id: number;

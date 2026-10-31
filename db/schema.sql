@@ -1483,3 +1483,28 @@ CREATE TABLE IF NOT EXISTS rsi_lesson_usage (
     shown_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (lesson_id, task_id, mode)
 );
+
+-- =====================================================================
+-- Workflows (n8n-style scheduled agent runs + canvas graph)
+-- =====================================================================
+CREATE TABLE IF NOT EXISTS workflows (
+    id            BIGSERIAL PRIMARY KEY,
+    name          TEXT NOT NULL,
+    description   TEXT NOT NULL DEFAULT '',
+    agent_key     TEXT NOT NULL DEFAULT 'auto',
+    enabled       BOOLEAN NOT NULL DEFAULT true,
+    -- manual = run only from UI; interval = every N seconds; daily = once per day at hour:minute
+    schedule_kind TEXT NOT NULL DEFAULT 'manual'
+                  CHECK (schedule_kind IN ('manual','interval','daily')),
+    interval_sec  INTEGER NOT NULL DEFAULT 0,
+    daily_hour    INTEGER NOT NULL DEFAULT 8 CHECK (daily_hour BETWEEN 0 AND 23),
+    daily_minute  INTEGER NOT NULL DEFAULT 0 CHECK (daily_minute BETWEEN 0 AND 59),
+    timezone      TEXT NOT NULL DEFAULT 'Local',
+    prompt        TEXT NOT NULL DEFAULT '',
+    graph_json    TEXT NOT NULL DEFAULT '{}',
+    last_fire     TIMESTAMPTZ,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_workflows_enabled ON workflows(enabled) WHERE enabled;
+CREATE INDEX IF NOT EXISTS idx_workflows_updated ON workflows(updated_at DESC);

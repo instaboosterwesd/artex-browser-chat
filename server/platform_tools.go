@@ -41,6 +41,11 @@ func (s *Server) platformTools() []actool.CoreTool {
 		s.toolAddAgentSkills(),
 		s.toolSetAgentLLM(),
 		s.toolInstallSkillFromGit(),
+		s.toolListWorkflows(),
+		s.toolCreateWorkflow(),
+		s.toolUpdateWorkflow(),
+		s.toolDeleteWorkflow(),
+		s.toolRunWorkflow(),
 	}
 }
 
@@ -53,6 +58,7 @@ var platformToolKeys = []string{
 	"list_agents", "create_agent", "update_agent", "delete_agent",
 	"list_available_skills", "set_agent_skills", "add_agent_skills", "set_agent_llm",
 	"install_skill_from_git",
+	"list_workflows", "create_workflow", "update_workflow", "delete_workflow", "run_workflow",
 }
 
 // ---- assets ----
@@ -980,6 +986,219 @@ func copyDir(src, dst string) error {
 		_, err = io.Copy(out, in)
 		return err
 	})
+}
+
+func (s *Server) toolListWorkflows() actool.CoreTool {
+	return wrTool("list_workflows",
+		"List automation workflows (name, schedule, agent, enabled, last_fire). Use before update/delete/run.",
+		objSchema(map[string]any{}),
+		func(_ context.Context, _ json.RawMessage) (actool.Result, error) {
+			if s.m == nil || s.m.pg == nil {
+				return actool.Errorf("database unavailable"), nil
+			}
+			items, err := s.m.pg.ListWorkflows()
+			if err != nil {
+				return actool.Errorf(err.Error()), nil
+			}
+			out := make([]map[string]any, 0, len(items))
+			for _, w := range items {
+				row := map[string]any{
+					"id": w.ID, "name": w.Name, "description": w.Description,
+					"agent_key": w.AgentKey, "enabled": w.Enabled,
+					"schedule_kind": w.ScheduleKind, "interval_sec": w.IntervalSec,
+					"daily_hour": w.DailyHour, "daily_minute": w.DailyMinute,
+					"prompt": w.Prompt,
+				}
+				if w.LastFire != nil {
+					row["last_fire"] = w.LastFire.Format(time.RFC3339)
+				}
+				out = append(out, row)
+			}
+			return jsonResult(map[string]any{"workflows": out})
+		})
+}
+
+func (s *Server) toolCreateWorkflow() actool.CoreTool {
+	return wrTool("create_workflow",
+		"Create an automation workflow. Examples: daily Telegram digest at 08:00, or interval checks. "+
+			"schedule_kind: manual | interval | daily. For daily set daily_hour/daily_minute; for interval set interval_sec (>=60). "+
+			"prompt is the instruction the agent runs when the workflow fires. Prefer agent_key=auto unless the user picks another.",
+		objSchema(map[string]any{
+			"name":          strParam("Workflow display name"),
+			"description":   strParam("Optional short description"),
+			"agent_key":     strParam("Agent that runs the workflow (default auto)"),
+			"schedule_kind": strParam("manual | interval | daily"),
+			"interval_sec":  map[string]any{"type": "integer", "description": "For interval schedules, seconds between runs (>=60)"},
+			"daily_hour":    map[string]any{"type": "integer", "description": "For daily schedules, hour 0-23 (local time)"},
+			"daily_minute":  map[string]any{"type": "integer", "description": "For daily schedules, minute 0-59"},
+			"prompt":        strParam("Instruction the agent executes on each run"),
+			"enabled":       map[string]any{"type": "boolean", "description": "Default true"},
+		}, "name", "prompt"),
+		func(_ context.Context, in json.RawMessage) (actool.Result, error) {
+			if s.m == nil || s.m.pg == nil {
+				return actool.Errorf("database unavailable"), nil
+			}
+			var a struct {
+				Name         string `json:"name"`
+				Description  string `json:"description"`
+				AgentKey     string `json:"agent_key"`
+				ScheduleKind string `json:"schedule_kind"`
+				IntervalSec  int    `json:"interval_sec"`
+				DailyHour    int    `json:"daily_hour"`
+				DailyMinute  int    `json:"daily_minute"`
+				Prompt       string `json:"prompt"`
+				Enabled      *bool  `json:"enabled"`
+			}
+			_ = json.Unmarshal(in, &a)
+			kind := strings.TrimSpace(a.ScheduleKind)
+			if kind == "" {
+				kind = "manual"
+			}
+			hour, minute := a.DailyHour, a.DailyMinute
+			if kind == "daily" && a.DailyHour == 0 && a.DailyMinute == 0 {
+				hour = 8
+			}
+			if msg := validateWorkflowFields(a.Name, kind, a.IntervalSec, hour, minute); msg != "" {
+				return actool.Errorf(msg), nil
+			}
+			agent := strings.TrimSpace(a.AgentKey)
+			if agent == "" {
+				agent = "auto"
+			}
+			enabled := true
+			if a.Enabled != nil {
+				enabled = *a.Enabled
+			}
+			graph := defaultWorkflowGraph(a.Name, kind, a.Prompt, agent, hour, minute, a.IntervalSec)
+			item, err := s.m.pg.CreateWorkflow(&db.Workflow{
+				Name: strings.TrimSpace(a.Name), Description: a.Description, AgentKey: agent,
+				Enabled: enabled, ScheduleKind: kind, IntervalSec: a.IntervalSec,
+				DailyHour: hour, DailyMinute: minute, Timezone: "Local",
+				Prompt: a.Prompt, GraphJSON: graph,
+			})
+			if err != nil {
+				return actool.Errorf(err.Error()), nil
+			}
+			return jsonResult(map[string]any{"ok": true, "workflow": item})
+		})
+}
+
+func (s *Server) toolUpdateWorkflow() actool.CoreTool {
+	return wrTool("update_workflow",
+		"Update an existing workflow by id (from list_workflows). Change name, prompt, schedule, agent, or enabled.",
+		objSchema(map[string]any{
+			"id":            map[string]any{"type": "integer", "description": "Workflow id"},
+			"name":          strParam("New name"),
+			"description":   strParam("New description"),
+			"agent_key":     strParam("New agent key"),
+			"schedule_kind": strParam("manual | interval | daily"),
+			"interval_sec":  map[string]any{"type": "integer"},
+			"daily_hour":    map[string]any{"type": "integer"},
+			"daily_minute":  map[string]any{"type": "integer"},
+			"prompt":        strParam("New run instruction"),
+			"enabled":       map[string]any{"type": "boolean"},
+		}, "id"),
+		func(_ context.Context, in json.RawMessage) (actool.Result, error) {
+			if s.m == nil || s.m.pg == nil {
+				return actool.Errorf("database unavailable"), nil
+			}
+			var a struct {
+				ID           int64   `json:"id"`
+				Name         string  `json:"name"`
+				Description  *string `json:"description"`
+				AgentKey     string  `json:"agent_key"`
+				ScheduleKind string  `json:"schedule_kind"`
+				IntervalSec  *int    `json:"interval_sec"`
+				DailyHour    *int    `json:"daily_hour"`
+				DailyMinute  *int    `json:"daily_minute"`
+				Prompt       *string `json:"prompt"`
+				Enabled      *bool   `json:"enabled"`
+			}
+			_ = json.Unmarshal(in, &a)
+			cur, err := s.m.pg.GetWorkflow(a.ID)
+			if err != nil {
+				return actool.Errorf("workflow not found"), nil
+			}
+			if strings.TrimSpace(a.Name) != "" {
+				cur.Name = strings.TrimSpace(a.Name)
+			}
+			if a.Description != nil {
+				cur.Description = *a.Description
+			}
+			if strings.TrimSpace(a.AgentKey) != "" {
+				cur.AgentKey = strings.TrimSpace(a.AgentKey)
+			}
+			if a.ScheduleKind != "" {
+				cur.ScheduleKind = a.ScheduleKind
+			}
+			if a.IntervalSec != nil {
+				cur.IntervalSec = *a.IntervalSec
+			}
+			if a.DailyHour != nil {
+				cur.DailyHour = *a.DailyHour
+			}
+			if a.DailyMinute != nil {
+				cur.DailyMinute = *a.DailyMinute
+			}
+			if a.Prompt != nil {
+				cur.Prompt = *a.Prompt
+			}
+			if a.Enabled != nil {
+				cur.Enabled = *a.Enabled
+			}
+			if msg := validateWorkflowFields(cur.Name, cur.ScheduleKind, cur.IntervalSec, cur.DailyHour, cur.DailyMinute); msg != "" {
+				return actool.Errorf(msg), nil
+			}
+			if err := s.m.pg.UpdateWorkflow(cur); err != nil {
+				return actool.Errorf(err.Error()), nil
+			}
+			updated, _ := s.m.pg.GetWorkflow(a.ID)
+			return jsonResult(map[string]any{"ok": true, "workflow": updated})
+		})
+}
+
+func (s *Server) toolDeleteWorkflow() actool.CoreTool {
+	return wrTool("delete_workflow",
+		"Delete a workflow by id.",
+		objSchema(map[string]any{
+			"id": map[string]any{"type": "integer", "description": "Workflow id"},
+		}, "id"),
+		func(_ context.Context, in json.RawMessage) (actool.Result, error) {
+			if s.m == nil || s.m.pg == nil {
+				return actool.Errorf("database unavailable"), nil
+			}
+			var a struct {
+				ID int64 `json:"id"`
+			}
+			_ = json.Unmarshal(in, &a)
+			if err := s.m.pg.DeleteWorkflow(a.ID); err != nil {
+				return actool.Errorf(err.Error()), nil
+			}
+			return jsonResult(map[string]any{"ok": true, "deleted": a.ID})
+		})
+}
+
+func (s *Server) toolRunWorkflow() actool.CoreTool {
+	return wrTool("run_workflow",
+		"Run a workflow immediately (manual fire), regardless of schedule.",
+		objSchema(map[string]any{
+			"id": map[string]any{"type": "integer", "description": "Workflow id"},
+		}, "id"),
+		func(_ context.Context, in json.RawMessage) (actool.Result, error) {
+			if s.m == nil || s.m.pg == nil {
+				return actool.Errorf("database unavailable"), nil
+			}
+			var a struct {
+				ID int64 `json:"id"`
+			}
+			_ = json.Unmarshal(in, &a)
+			w, err := s.m.pg.GetWorkflow(a.ID)
+			if err != nil {
+				return actool.Errorf("workflow not found"), nil
+			}
+			s.fireWorkflow(w, true)
+			return jsonResult(map[string]any{"ok": true, "id": a.ID, "agent_key": w.AgentKey})
+		})
 }
 
 // grantBrowserMCPIfNeeded grants the seeded Playwright "browser" MCP to the agent

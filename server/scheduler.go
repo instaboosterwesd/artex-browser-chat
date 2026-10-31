@@ -128,6 +128,7 @@ func (sc *Scheduler) step() {
 	sc.fireTaskTimeouts(triggers)
 	sc.fireToolCalls(triggers)
 	sc.fireTaskCreates(triggers)
+	sc.s.fireDueWorkflows()
 }
 
 // fireIntervals fires triggers whose interval has elapsed since last_fire.

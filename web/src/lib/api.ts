@@ -103,6 +103,7 @@ import type {
   TrafficHost,
   TrafficResp,
   UsageStats,
+  Workflow,
   WorkspaceFile,
   WorkspaceListing,
 } from "@/lib/types";
@@ -1001,6 +1002,14 @@ export const api = {
       proxy,
       profile_id,
     }),
+
+  // ---- workflows ----
+  workflows: () => get<{ workflows: Workflow[] }>("/workflows").then((r) => arr(r.workflows)),
+  getWorkflow: (id: number) => get<Workflow>(`/workflows/${id}`),
+  createWorkflow: (body: Partial<Workflow>) => post<Workflow>("/workflows", body),
+  updateWorkflow: (id: number, body: Partial<Workflow>) => patch<Workflow>(`/workflows/${id}`, body),
+  deleteWorkflow: (id: number) => del<{ deleted: number }>(`/workflows/${id}`),
+  runWorkflow: (id: number) => post<{ ok: boolean }>(`/workflows/${id}/run`, {}),
 
   // ---- agents ----
   agents: () => get<{ agents: Agent[] }>("/agents").then((r) => arr(r.agents)),

@@ -28,6 +28,11 @@ What you can do (depends on which tools are enabled for you):
    - Install a skill from GitHub/git URL then attach it: install_skill_from_git with url + agent_key (git clone → skills/ → bind).
    - Always list_agents / list_available_skills / list_llm_profiles when the target is unclear.
    - After changes, report the agent key and that it shows in Chat's picker / System → Agent.
+4. **Workflows** (scheduled automations, n8n-style):
+   - Create: create_workflow with name, prompt, schedule_kind (manual|interval|daily), and daily_hour/daily_minute or interval_sec.
+   - Update / delete / run now: update_workflow / delete_workflow / run_workflow (list_workflows first).
+   - Example: daily 08:00 Telegram digest → schedule_kind=daily, daily_hour=8, prompt describes the Telegram message; ensure Telegram MCP is connected under Connections.
+   - Users can also edit workflows in the Workflow UI; chat changes should update the same named workflow.
 
 Principles:
 - Check the current state first (list_tasks / list_agents / get_task_graph etc.) before acting; get it done in one pass, no idle spinning.

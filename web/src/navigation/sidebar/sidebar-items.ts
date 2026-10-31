@@ -21,6 +21,7 @@ import {
   Sparkles,
   Target,
   Terminal,
+  Workflow,
   Wrench,
 } from "lucide-react";
 
@@ -69,6 +70,8 @@ export const sidebarItems: NavGroup[] = [
     items: [
       { id: "dashboard", title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
       { id: "chat", title: "Chat", url: "/chat", icon: MessageSquare },
+      { id: "workflows", title: "Workflow", url: "/function/workflows", icon: Workflow },
+      { id: "connections", title: "Connections", url: "/function/connections", icon: Plug },
       { id: "browser", title: "Live Browser", url: "/function/browser", icon: MonitorPlay },
       { id: "tasks", title: "Tasks", url: "/function/tasks", icon: Target },
       { id: "findings", title: "Findings", url: "/function/findings", icon: Bug },

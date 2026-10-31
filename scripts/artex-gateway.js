@@ -15,9 +15,9 @@ const LISTEN = Number(process.env.ARTEX_GATEWAY_PORT || 8790);
 const ARTEX = process.env.ARTEX_UPSTREAM || "http://127.0.0.1:8787";
 const BRIDGE = process.env.BROWSER_BRIDGE_UPSTREAM || "http://127.0.0.1:9223";
 const CONNECTOR = process.env.OPEN_CONNECTOR_UPSTREAM || "http://127.0.0.1:3000";
-const STATIC_ROOT =
-  process.env.ARTEX_STATIC_ROOT ||
-  path.resolve(__dirname, "../web/out");
+const STATIC_ROOT = path.resolve(
+  process.env.ARTEX_STATIC_ROOT || path.join(__dirname, "../web/out"),
+);
 
 const proxy = httpProxy.createProxyServer({ ws: true, xfwd: true });
 proxy.on("error", (err, _req, res) => {
@@ -46,10 +46,15 @@ const MIME = {
 };
 
 function safeJoin(root, reqPath) {
-  const decoded = decodeURIComponent(reqPath.split("?")[0]);
-  const cleaned = path.normalize(decoded).replace(/^(\.\.[/\\])+/, "");
-  const full = path.join(root, cleaned);
-  if (!full.startsWith(root)) return null;
+  const decoded = decodeURIComponent(String(reqPath).split("?")[0]);
+  // Strip leading slashes so path.join(root, ...) does not discard root on POSIX.
+  const cleaned = path
+    .normalize(decoded)
+    .replace(/^(\.\.[/\\])+/, "")
+    .replace(/^[/\\]+/, "");
+  const full = path.resolve(root, cleaned);
+  const rootWithSep = root.endsWith(path.sep) ? root : root + path.sep;
+  if (full !== root && !full.startsWith(rootWithSep)) return null;
   return full;
 }
 
@@ -101,6 +106,14 @@ function tryStatic(req, res) {
 const server = http.createServer((req, res) => {
   const u = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
 
+  // Static export of (external)/page.tsx redirect() breaks as index.html (__next_error__).
+  // Send first-time users to setup; login page itself redirects when already initialized.
+  if ((req.method === "GET" || req.method === "HEAD") && (u.pathname === "/" || u.pathname === "/index.html")) {
+    res.writeHead(302, { Location: "/setup", "Cache-Control": "no-store" });
+    res.end();
+    return;
+  }
+
   if (u.pathname === "/browser-bridge" || u.pathname.startsWith("/browser-bridge/")) {
     req.url = u.pathname.replace(/^\/browser-bridge/, "") + u.search || "/";
     if (!req.url.startsWith("/")) req.url = "/" + req.url;
@@ -108,9 +121,23 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // OpenConnector console + MCP + OpenAPI (oomol-lab/open-connector)
+  // Open Connector SPA needs its own origin (absolute /api/*). Redirect console link.
   if (u.pathname === "/open-connector" || u.pathname.startsWith("/open-connector/")) {
-    let rest = u.pathname.replace(/^\/open-connector/, "") || "/";
+    const dedicated = (process.env.OPEN_CONNECTOR_PUBLIC_URL || "").replace(/\/$/, "");
+    if (dedicated) {
+      const rest = u.pathname.replace(/^\/open-connector/, "") || "/";
+      res.writeHead(302, {
+        Location: dedicated + (rest === "/" ? "/" : rest) + u.search,
+        "Cache-Control": "no-store",
+      });
+      res.end();
+      return;
+    }
+  }
+
+  // Same-origin API proxy for Connections UI (avoids CORS to the OC tunnel).
+  if (u.pathname === "/oc-api" || u.pathname.startsWith("/oc-api/")) {
+    let rest = u.pathname.replace(/^\/oc-api/, "") || "/";
     if (!rest.startsWith("/")) rest = "/" + rest;
     req.url = rest + u.search;
     proxy.web(req, res, { target: CONNECTOR });
@@ -142,6 +169,6 @@ server.on("upgrade", (req, socket, head) => {
 
 server.listen(LISTEN, "0.0.0.0", () => {
   console.log(
-    `[gateway] :${LISTEN}  static=${STATIC_ROOT}  artex=${ARTEX}  bridge=${BRIDGE}  connector=${CONNECTOR}`,
+    `[gateway] :${LISTEN}  static=${STATIC_ROOT}  artex=${ARTEX}  bridge=${BRIDGE}  oc=${CONNECTOR}`,
   );
 });

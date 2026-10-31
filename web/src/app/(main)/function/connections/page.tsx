@@ -3,20 +3,10 @@
 import * as React from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import {
-  CheckCircle2Icon,
-  ExternalLinkIcon,
-  Loader2Icon,
-  PlugIcon,
-  PlusIcon,
-  RefreshCwIcon,
-  Settings2Icon,
-  UnplugIcon,
-} from "lucide-react";
+import { Link2Icon, Loader2Icon, PlusIcon, SearchIcon } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -29,88 +19,153 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api } from "@/lib/api";
 import type { MCPServer } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
-const OPEN_CONNECTOR_MCP_NAME = "open-connector";
-const OPEN_CONNECTOR_MCP_URL = "http://127.0.0.1:3000/mcp";
-const OPEN_CONNECTOR_CONSOLE = "/open-connector/";
-const OPEN_CONNECTOR_HEALTH = "/open-connector/health";
-const OPEN_CONNECTOR_PROVIDERS = "/open-connector/v1/providers";
+const OC_PUBLIC = "https://sheer-intl-van-floors.trycloudflare.com";
+const OC_API = "/oc-api";
+const OC_MCP_NAME = "open-connector";
+const OC_MCP_URL = "http://127.0.0.1:3000/mcp";
 
-type Preset = {
-  id: string;
-  name: string;
-  title: string;
-  description: string;
-  category: string;
-  command: string;
-  args: string[];
-  envKeys: { key: string; label: string; placeholder?: string; secret?: boolean }[];
-};
-
-/** Direct MCP fallbacks (when you want a single app without OpenConnector). */
-const DIRECT_PRESETS: Preset[] = [
-  {
-    id: "browser",
-    name: "browser",
-    title: "Playwright Browser",
-    description: "Built-in headed Chrome via CDP (already used by Live Browser / chat).",
-    category: "Direct MCP",
-    command: "npx",
-    args: ["-y", "@playwright/mcp", "--cdp-endpoint", "http://127.0.0.1:9222", "--caps", "vision"],
-    envKeys: [],
-  },
-  {
-    id: "filesystem",
-    name: "filesystem",
-    title: "Filesystem",
-    description: "Read/write files under the workspace directory.",
-    category: "Direct MCP",
-    command: "npx",
-    args: ["-y", "@modelcontextprotocol/server-filesystem", "/home/hgdfsjgfjf/ARTEX"],
-    envKeys: [],
-  },
+const POPULAR = [
+  "github",
+  "gmail",
+  "slack",
+  "notion",
+  "telegram",
+  "discord",
+  "openai",
+  "stripe",
+  "hubspot",
+  "jira",
+  "shopify",
+  "google_sheets",
+  "airtable",
+  "asana",
+  "dropbox",
+  "linkedin",
+  "whatsapp",
+  "twitter",
+  "figma",
+  "linear",
+  "gitlab",
+  "bitbucket",
+  "zoom",
+  "calendar",
+  "drive",
+  "sheets",
+  "docs",
+  "trello",
+  "intercom",
+  "zendesk",
+  "salesforce",
+  "pipedrive",
+  "clickup",
 ];
 
-function ConnectDialog({
-  preset,
-  existing,
+type OcProvider = {
+  service: string;
+  displayName: string;
+  categories?: unknown;
+  authTypes?: string[];
+  homepageUrl?: string | null;
+  iconUrl?: string | null;
+};
+
+type OcConnection = {
+  service: string;
+  configured?: boolean;
+  authType?: string;
+  connectionName?: string;
+};
+
+function hostFromUrl(url?: string | null): string | null {
+  if (!url) return null;
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return null;
+  }
+}
+
+function providerIcon(p: OcProvider): string {
+  if (p.iconUrl) return p.iconUrl;
+  const host = hostFromUrl(p.homepageUrl) || `${p.service.replace(/_/g, "")}.com`;
+  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=128`;
+}
+
+function providerSubtitle(p: OcProvider): string {
+  const host = hostFromUrl(p.homepageUrl);
+  if (host) return host;
+  return `${p.service}.open-connector`;
+}
+
+async function ocGet<T>(path: string): Promise<T> {
+  const res = await fetch(`${OC_API}${path}`, { cache: "no-store" });
+  if (!res.ok) throw new Error(`${path} → ${res.status}`);
+  return (await res.json()) as T;
+}
+
+async function ocPut(path: string, body: unknown): Promise<void> {
+  const res = await fetch(`${OC_API}${path}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error((await res.text()) || `${path} → ${res.status}`);
+}
+
+function PluginIcon({ provider, className }: { provider: OcProvider; className?: string }) {
+  const [broken, setBroken] = React.useState(false);
+  const letter = (provider.displayName || provider.service || "?").charAt(0).toUpperCase();
+  if (broken) {
+    return (
+      <div
+        className={cn(
+          "bg-muted text-muted-foreground flex size-10 shrink-0 items-center justify-center rounded-xl text-sm font-semibold",
+          className,
+        )}
+      >
+        {letter}
+      </div>
+    );
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={providerIcon(provider)}
+      alt=""
+      className={cn("bg-background size-10 shrink-0 rounded-xl border object-contain p-1.5", className)}
+      onError={() => setBroken(true)}
+    />
+  );
+}
+
+function ConnectKeyDialog({
+  provider,
   onClose,
   onDone,
 }: {
-  preset: Preset | null;
-  existing?: MCPServer;
+  provider: OcProvider | null;
   onClose: () => void;
   onDone: () => void;
 }) {
-  const [env, setEnv] = React.useState<Record<string, string>>({});
+  const [key, setKey] = React.useState("");
   const [busy, setBusy] = React.useState(false);
+  if (!provider) return null;
 
-  React.useEffect(() => {
-    if (!preset) return;
-    const init: Record<string, string> = {};
-    for (const k of preset.envKeys) init[k.key] = existing?.env?.[k.key] ?? "";
-    setEnv(init);
-  }, [preset, existing]);
-
-  if (!preset) return null;
-
-  async function connect() {
-    if (!preset) return;
-    const p = preset;
+  async function save() {
+    const p = provider;
+    if (!p) return;
     setBusy(true);
     try {
-      await api.saveMcpServer({
-        id: existing?.id,
-        name: p.name,
-        transport: "stdio",
-        command: p.command,
-        args: p.args,
-        env,
-        enabled: true,
+      await ocPut(`/api/connections/${encodeURIComponent(p.service)}`, {
+        authType: "api_key",
+        values: { apiKey: key.trim() },
       });
-      toast.success(`${p.title} connected`);
+      toast.success(`${p.displayName} connected`);
       onDone();
       onClose();
+      setKey("");
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -119,39 +174,34 @@ function ConnectDialog({
   }
 
   return (
-    <Dialog open={!!preset} onOpenChange={(o) => !o && onClose()}>
+    <Dialog open={!!provider} onOpenChange={(o) => !o && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>
-            {existing ? "Update" : "Connect"} {preset.title}
+          <DialogTitle className="flex items-center gap-3">
+            <PluginIcon provider={provider} />
+            Connect {provider.displayName}
           </DialogTitle>
-          <DialogDescription>{preset.description}</DialogDescription>
+          <DialogDescription>
+            Paste an API key / token. For OAuth, use the provider console page instead.
+          </DialogDescription>
         </DialogHeader>
-        <div className="grid gap-3 py-1">
-          {preset.envKeys.length === 0 ? (
-            <p className="text-muted-foreground text-sm">No secrets required — click Connect to add this MCP.</p>
-          ) : (
-            preset.envKeys.map((k) => (
-              <div key={k.key} className="grid gap-1.5">
-                <Label htmlFor={k.key}>{k.label}</Label>
-                <Input
-                  id={k.key}
-                  type={k.secret ? "password" : "text"}
-                  placeholder={k.placeholder}
-                  value={env[k.key] ?? ""}
-                  onChange={(e) => setEnv((m) => ({ ...m, [k.key]: e.target.value }))}
-                />
-              </div>
-            ))
-          )}
+        <div className="grid gap-1.5">
+          <Label htmlFor="oc-key">API key / token</Label>
+          <Input
+            id="oc-key"
+            type="password"
+            placeholder="paste key…"
+            value={key}
+            onChange={(e) => setKey(e.target.value)}
+          />
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={() => void connect()} disabled={busy}>
+          <Button onClick={() => void save()} disabled={busy || !key.trim()}>
             {busy && <Loader2Icon className="animate-spin" />}
-            {existing ? "Save" : "Connect"}
+            Connect
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -161,295 +211,290 @@ function ConnectDialog({
 
 export default function ConnectionsPage() {
   const [servers, setServers] = React.useState<MCPServer[]>([]);
+  const [ocUp, setOcUp] = React.useState<boolean | null>(null);
+  const [providers, setProviders] = React.useState<OcProvider[]>([]);
+  const [connections, setConnections] = React.useState<OcConnection[]>([]);
+  const [q, setQ] = React.useState("");
+  const [tab, setTab] = React.useState<"popular" | "all">("popular");
+  const [busyMcp, setBusyMcp] = React.useState(false);
+  const [keyProvider, setKeyProvider] = React.useState<OcProvider | null>(null);
   const [loading, setLoading] = React.useState(true);
-  const [connectorUp, setConnectorUp] = React.useState<boolean | null>(null);
-  const [providerCount, setProviderCount] = React.useState<number | null>(null);
-  const [actionCount, setActionCount] = React.useState<number | null>(null);
-  const [attaching, setAttaching] = React.useState(false);
-  const [runtimeToken, setRuntimeToken] = React.useState("");
-  const [active, setActive] = React.useState<Preset | null>(null);
 
-  const reload = React.useCallback(() => {
+  const reload = React.useCallback(async () => {
     setLoading(true);
-    api
-      .mcpServers()
-      .then(setServers)
-      .catch(() => toast.error("Failed to load MCP connections"))
-      .finally(() => setLoading(false));
-  }, []);
-
-  const pingConnector = React.useCallback(async () => {
     try {
-      const health = await fetch(OPEN_CONNECTOR_HEALTH, { cache: "no-store" });
-      if (!health.ok) throw new Error(String(health.status));
-      setConnectorUp(true);
+      const mcpPromise = api.mcpServers().catch(() => [] as MCPServer[]);
       try {
-        const res = await fetch(OPEN_CONNECTOR_PROVIDERS, { cache: "no-store" });
-        if (res.ok) {
-          const body = (await res.json()) as { data?: unknown[] };
-          const list = Array.isArray(body.data) ? body.data : [];
-          setProviderCount(list.length);
-          setActionCount(null);
-        } else {
-          setProviderCount(null);
-          setActionCount(null);
-        }
+        await ocGet("/health");
+        setOcUp(true);
+        const [plist, clist] = await Promise.all([
+          ocGet<OcProvider[]>("/api/providers"),
+          ocGet<OcConnection[]>("/api/connections"),
+        ]);
+        setProviders(Array.isArray(plist) ? plist : []);
+        setConnections(Array.isArray(clist) ? clist : []);
       } catch {
-        setProviderCount(null);
-        setActionCount(null);
+        setOcUp(false);
+        setProviders([]);
+        setConnections([]);
       }
-    } catch {
-      setConnectorUp(false);
-      setProviderCount(null);
-      setActionCount(null);
+      setServers(await mcpPromise);
+    } finally {
+      setLoading(false);
     }
   }, []);
 
   React.useEffect(() => {
-    reload();
-    void pingConnector();
-  }, [reload, pingConnector]);
+    void reload();
+  }, [reload]);
 
-  const byName = React.useMemo(() => {
-    const m = new Map<string, MCPServer>();
-    for (const s of servers) m.set(s.name, s);
+  const connectedMap = React.useMemo(() => {
+    const m = new Map<string, OcConnection>();
+    for (const c of connections) {
+      if (c.configured === false) continue;
+      m.set(c.service, c);
+    }
     return m;
-  }, [servers]);
+  }, [connections]);
 
-  const openConnectorMcp = byName.get(OPEN_CONNECTOR_MCP_NAME);
+  const byService = React.useMemo(() => {
+    const m = new Map<string, OcProvider>();
+    for (const p of providers) m.set(p.service, p);
+    return m;
+  }, [providers]);
 
-  async function attachOpenConnector() {
-    setAttaching(true);
-    try {
-      const env: Record<string, string> = {};
-      if (runtimeToken.trim()) {
-        env.Authorization = `Bearer ${runtimeToken.trim()}`;
+  const yourConnections = React.useMemo(() => {
+    const out: OcProvider[] = [];
+    for (const service of connectedMap.keys()) {
+      const p = byService.get(service);
+      if (p) out.push(p);
+      else out.push({ service, displayName: service, authTypes: [] });
+    }
+    return out;
+  }, [connectedMap, byService]);
+
+  const popularProviders = React.useMemo(() => {
+    const list: OcProvider[] = [];
+    for (const id of POPULAR) {
+      const p = byService.get(id);
+      if (p) list.push(p);
+    }
+    // fill if some missing names differ
+    if (list.length < 12) {
+      for (const p of providers) {
+        if (list.some((x) => x.service === p.service)) continue;
+        list.push(p);
+        if (list.length >= 33) break;
       }
+    }
+    return list;
+  }, [byService, providers]);
+
+  const visible = React.useMemo(() => {
+    const query = q.trim().toLowerCase();
+    let base = tab === "popular" ? popularProviders : providers;
+    if (query) {
+      base = providers.filter(
+        (p) =>
+          p.service.toLowerCase().includes(query) ||
+          p.displayName.toLowerCase().includes(query),
+      );
+    }
+    return base.slice(0, tab === "all" && !query ? 121 : query ? 80 : 36);
+  }, [q, tab, popularProviders, providers]);
+
+  const ocMcp = servers.find((s) => s.name === OC_MCP_NAME);
+
+  async function ensureMcp() {
+    if (ocMcp?.enabled) return;
+    setBusyMcp(true);
+    try {
       await api.saveMcpServer({
-        id: openConnectorMcp?.id,
-        name: OPEN_CONNECTOR_MCP_NAME,
+        id: ocMcp?.id,
+        name: OC_MCP_NAME,
         transport: "http",
-        url: OPEN_CONNECTOR_MCP_URL,
+        url: OC_MCP_URL,
         command: "",
         args: [],
-        env,
+        env: {},
         enabled: true,
       });
-      toast.success("Open Connector attached as MCP — agents can search_actions / execute_action");
-      reload();
-      try {
-        const id = openConnectorMcp?.id;
-        if (id) await api.refreshMcpServer(id);
-      } catch {
-        /* refresh optional until first use */
-      }
+      toast.success("Open Connector MCP ready for agents");
+      await reload();
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
-      setAttaching(false);
+      setBusyMcp(false);
     }
   }
 
-  async function detachOpenConnector() {
-    if (!openConnectorMcp) return;
-    if (!window.confirm("Detach Open Connector MCP from ARTEX?")) return;
-    try {
-      await api.deleteMcpServer(openConnectorMcp.id);
-      toast.success("Detached");
-      reload();
-    } catch (e) {
-      toast.error((e as Error).message);
+  function connectProvider(p: OcProvider) {
+    void ensureMcp();
+    if ((p.authTypes || []).includes("api_key")) {
+      setKeyProvider(p);
+      return;
     }
+    window.open(`${OC_PUBLIC}/providers/${encodeURIComponent(p.service)}`, "_blank", "noreferrer");
   }
 
   return (
-    <div className="flex flex-1 flex-col gap-4 md:gap-6">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Connections</h1>
-          <p className="text-muted-foreground text-sm">
-            Powered by{" "}
-            <a
-              href="https://github.com/oomol-lab/open-connector"
-              target="_blank"
-              rel="noreferrer"
-              className="underline"
-            >
-              Open Connector
-            </a>{" "}
-            (open source) — connect Telegram, Gmail, Slack, GitHub and 1,000+ apps once, then use them from Workflows and Auto via MCP.
-          </p>
+    <div className="bg-background flex flex-1 flex-col gap-6 p-1 md:p-2">
+      <div className="flex flex-col gap-1">
+        <h1 className="text-2xl font-semibold tracking-tight">Connections</h1>
+        <p className="text-muted-foreground text-sm">Connect the tools your agents can use on your behalf.</p>
+      </div>
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="relative flex-1">
+          <SearchIcon className="text-muted-foreground absolute top-2.5 left-3 size-4" />
+          <Input
+            className="bg-background h-10 rounded-xl border pl-9 shadow-none"
+            placeholder="Search connections..."
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
         </div>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => {
-            reload();
-            void pingConnector();
-          }}
-          disabled={loading}
-        >
-          <RefreshCwIcon className={loading ? "animate-spin" : undefined} />
-          Refresh
+        <Button asChild className="h-10 rounded-xl" variant="outline">
+          <Link href="/system/mcp">
+            <PlusIcon data-icon="inline-start" />
+            Add custom server
+          </Link>
         </Button>
       </div>
 
-      <Card className="border-primary/30">
-        <CardHeader>
-          <CardTitle className="flex flex-wrap items-center gap-2">
-            <PlugIcon className="size-4" /> Open Connector
-            {connectorUp === true && (
-              <Badge variant="secondary" className="gap-1 text-[10px]">
-                <CheckCircle2Icon className="size-3 text-emerald-600" /> Online
-              </Badge>
-            )}
-            {connectorUp === false && (
-              <Badge variant="outline" className="text-destructive text-[10px]">
-                Offline
-              </Badge>
-            )}
-            {connectorUp === null && (
-              <Badge variant="outline" className="text-[10px]">
-                Checking…
-              </Badge>
-            )}
-          </CardTitle>
-          <CardDescription>
-            Self-hosted gateway from{" "}
-            <span className="font-mono text-[11px]">oomol-lab/open-connector</span>
-            {providerCount != null && actionCount != null
-              ? ` · ${providerCount} providers · ${actionCount} actions`
-              : ""}
-            . Open the console to OAuth / API-key apps, then attach MCP so agents can call them.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          {connectorUp === false && (
-            <p className="text-muted-foreground rounded-md border border-dashed p-3 text-sm">
-              Runtime not reachable on <span className="font-mono">:3000</span>. Start it:
-              <code className="bg-muted mt-2 block rounded px-2 py-1 font-mono text-xs">
-                bash scripts/start-open-connector.sh
-              </code>
-            </p>
-          )}
-
-          <div className="grid gap-1.5 sm:max-w-md">
-            <Label htmlFor="runtime-token">Runtime token (optional)</Label>
-            <Input
-              id="runtime-token"
-              type="password"
-              placeholder="Paste OOMOL_CONNECT_RUNTIME_TOKEN if auth is enabled"
-              value={runtimeToken}
-              onChange={(e) => setRuntimeToken(e.target.value)}
-            />
-            <p className="text-muted-foreground text-[11px]">
-              Stored as MCP <span className="font-mono">Authorization</span> header. Leave empty for open local runtimes.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <Button asChild variant="outline" size="sm" disabled={connectorUp === false}>
-              <a href={OPEN_CONNECTOR_CONSOLE} target="_blank" rel="noreferrer">
-                <ExternalLinkIcon data-icon="inline-start" />
-                Open console
-              </a>
-            </Button>
-            <Button size="sm" onClick={() => void attachOpenConnector()} disabled={attaching || connectorUp === false}>
-              {attaching ? <Loader2Icon className="animate-spin" /> : <PlusIcon data-icon="inline-start" />}
-              {openConnectorMcp ? "Re-attach MCP" : "Attach as MCP"}
-            </Button>
-            {openConnectorMcp && (
-              <Button size="sm" variant="ghost" onClick={() => void detachOpenConnector()}>
-                <UnplugIcon data-icon="inline-start" />
-                Detach
-              </Button>
-            )}
-            <Button asChild size="sm" variant="ghost">
-              <Link href="/system/mcp">Advanced MCP list</Link>
-            </Button>
-          </div>
-
-          {openConnectorMcp && (
-            <div className="text-muted-foreground flex flex-wrap items-center gap-2 text-xs">
-              <Badge variant="secondary" className="gap-1">
-                <CheckCircle2Icon className="size-3" /> MCP linked
-              </Badge>
-              <span className="font-mono">
-                {openConnectorMcp.transport} · {openConnectorMcp.url || OPEN_CONNECTOR_MCP_URL}
-              </span>
-              <span>Ask Auto: search_actions / execute_action (e.g. Telegram, Gmail)</span>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Active MCP servers</CardTitle>
-          <CardDescription>
-            {servers.length === 0 ? "None yet" : `${servers.length} server(s) visible to agents`}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {servers.length === 0 ? (
-            <p className="text-muted-foreground text-sm">Attach Open Connector or a direct MCP below.</p>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {servers.map((s) => (
-                <Badge key={s.id} variant={s.enabled ? "secondary" : "outline"} className="gap-1">
-                  {s.enabled ? <CheckCircle2Icon className="size-3 text-emerald-600" /> : null}
-                  {s.name}
-                  <span className="text-muted-foreground font-mono text-[9px]">{s.transport}</span>
-                </Badge>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <div className="space-y-3">
-        <h2 className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">Direct MCP (optional)</h2>
-        <p className="text-muted-foreground text-xs">
-          Prefer Open Connector for SaaS apps. Use these only for local/browser extras.
-        </p>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {DIRECT_PRESETS.map((p) => {
-            const existing = byName.get(p.name);
-            return (
-              <div key={p.id} className="flex flex-col gap-3 rounded-lg border p-4">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <div className="text-sm font-medium">{p.title}</div>
-                    <p className="text-muted-foreground mt-1 text-xs">{p.description}</p>
-                  </div>
-                  {existing ? (
-                    <Badge variant="secondary" className="shrink-0 gap-1 text-[10px]">
-                      <CheckCircle2Icon className="size-3" /> On
-                    </Badge>
-                  ) : null}
+      <section className="bg-card rounded-2xl border p-5 shadow-sm">
+        <h2 className="mb-3 text-sm font-semibold">Your connections</h2>
+        {yourConnections.length === 0 ? (
+          <p className="text-muted-foreground text-sm">
+            Nothing connected yet. Pick a tool below — it takes under a minute.
+          </p>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {yourConnections.map((p) => (
+              <div key={p.service} className="bg-background flex items-center gap-3 rounded-xl border p-3">
+                <PluginIcon provider={p} />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-semibold">{p.displayName}</div>
+                  <div className="text-muted-foreground truncate text-xs">{providerSubtitle(p)}</div>
                 </div>
-                <Button size="sm" className="mt-auto" onClick={() => setActive(p)}>
-                  {existing ? (
-                    <>
-                      <Settings2Icon data-icon="inline-start" /> Configure
-                    </>
-                  ) : (
-                    <>
-                      <PlusIcon data-icon="inline-start" /> Connect
-                    </>
-                  )}
+                <Badge variant="secondary" className="text-[10px]">
+                  Connected
+                </Badge>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="rounded-lg"
+                  onClick={() =>
+                    window.open(
+                      `${OC_PUBLIC}/providers/${encodeURIComponent(p.service)}`,
+                      "_blank",
+                      "noreferrer",
+                    )
+                  }
+                >
+                  <Link2Icon className="size-4" />
                 </Button>
               </div>
-            );
-          })}
-        </div>
-      </div>
+            ))}
+          </div>
+        )}
+      </section>
 
-      <ConnectDialog
-        preset={active}
-        existing={active ? byName.get(active.name) : undefined}
-        onClose={() => setActive(null)}
-        onDone={reload}
+      <section className="space-y-4">
+        <div>
+          <h2 className="text-sm font-semibold">Add a connection</h2>
+          <p className="text-muted-foreground mt-1 text-sm">
+            Curated Open Connector integrations — or bring your own MCP-compatible server.
+            {ocUp === false ? " (runtime offline)" : ""}
+            {loading ? " Loading…" : ""}
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setTab("popular")}
+            className={cn(
+              "inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm transition-colors",
+              tab === "popular" ? "bg-violet-100 text-violet-900" : "text-muted-foreground hover:bg-muted",
+            )}
+          >
+            Popular
+            <span className="bg-background/80 rounded-full px-1.5 text-[11px] font-medium">
+              {Math.min(popularProviders.length, 33)}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab("all")}
+            className={cn(
+              "inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm transition-colors",
+              tab === "all" ? "bg-violet-100 text-violet-900" : "text-muted-foreground hover:bg-muted",
+            )}
+          >
+            All
+            <span className="bg-background/80 rounded-full px-1.5 text-[11px] font-medium">
+              {providers.length || "—"}
+            </span>
+          </button>
+          <div className="ml-auto flex gap-2">
+            <Button
+              size="sm"
+              variant="ghost"
+              className="rounded-lg"
+              disabled={busyMcp || ocUp === false}
+              onClick={() => void ensureMcp()}
+            >
+              {busyMcp ? <Loader2Icon className="animate-spin" /> : null}
+              {ocMcp?.enabled ? "MCP on" : "Enable MCP"}
+            </Button>
+            <Button asChild size="sm" variant="ghost" className="rounded-lg">
+              <a href={OC_PUBLIC} target="_blank" rel="noreferrer">
+                Full console
+              </a>
+            </Button>
+          </div>
+        </div>
+
+        {ocUp === false ? (
+          <div className="bg-card text-muted-foreground rounded-2xl border border-dashed p-6 text-sm">
+            Open Connector is offline. Run{" "}
+            <code className="font-mono text-xs">bash scripts/start-open-connector.sh</code>
+          </div>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {visible.map((p) => {
+              const connected = connectedMap.has(p.service);
+              return (
+                <div
+                  key={p.service}
+                  className="bg-card flex min-h-[96px] items-center gap-3 rounded-2xl border p-4 shadow-sm"
+                >
+                  <PluginIcon provider={p} />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-semibold">{p.displayName}</div>
+                    <div className="text-muted-foreground truncate text-xs">{providerSubtitle(p)}</div>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="shrink-0 rounded-xl"
+                    onClick={() => connectProvider(p)}
+                  >
+                    <Link2Icon data-icon="inline-start" />
+                    {connected ? "Manage" : "Connect"}
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      <ConnectKeyDialog
+        provider={keyProvider}
+        onClose={() => setKeyProvider(null)}
+        onDone={() => void reload()}
       />
     </div>
   );

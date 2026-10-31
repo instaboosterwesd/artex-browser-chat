@@ -91,8 +91,25 @@ export default function WorkspacePage() {
     [],
   );
 
+  // Deep-link from chat tool "File" buttons: ?path=<dir>&file=<rel-file>
   React.useEffect(() => {
-    load("");
+    const params = new URLSearchParams(window.location.search);
+    const startPath = params.get("path") ?? "";
+    const startFile = params.get("file");
+    load(startPath);
+    if (!startFile) return;
+    let cancelled = false;
+    api
+      .workspaceRead(startFile)
+      .then((f) => {
+        if (!cancelled) setEdit({ file: f, content: f.content ?? "", dirty: false, saving: false });
+      })
+      .catch(() => {
+        /* Directory-only navigation still works if the file cannot be opened. */
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [load]);
 
   const crumbs = React.useMemo(() => {

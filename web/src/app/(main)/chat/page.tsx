@@ -7,9 +7,12 @@ import {
   Bot,
   ChevronDownIcon,
   ChevronRightIcon,
+  HistoryIcon,
   ListChecksIcon,
   Loader2Icon,
   MoreHorizontalIcon,
+  PanelLeftCloseIcon,
+  PanelLeftOpenIcon,
   PaperclipIcon,
   PencilIcon,
   PinIcon,
@@ -1055,6 +1058,9 @@ export default function ChatPage() {
   const [convs, setConvs] = React.useState<Conversation[]>([]);
   const [agentFilter, setAgentFilter] = React.useState<string | null>(null);
   const [selectedId, setSelectedId] = React.useState<number | null>(null);
+  // History rail: open on the new-chat landing page; collapses when a conversation
+  // is opened so the transcript/composer get the full width (toggle to reopen).
+  const [historyOpen, setHistoryOpen] = React.useState(true);
   const [sourceRequested, setSourceRequested] = React.useState(false);
   const [convsLoaded, setConvsLoaded] = React.useState(false);
   const selectConversation = React.useCallback((id: number | null) => {
@@ -1065,6 +1071,7 @@ export default function ChatPage() {
       window.history.replaceState(null, "", url);
     }
     setSelectedId(id);
+    setHistoryOpen(id == null);
   }, [selectedId]);
 
   const [renamingId, setRenamingId] = React.useState<number | null>(null);
@@ -1168,7 +1175,10 @@ export default function ChatPage() {
     setSourceRequested(params.has("approval"));
     const c = params.get("c");
     const id = c ? Number(c) : NaN;
-    if (Number.isFinite(id)) setSelectedId(id);
+    if (Number.isFinite(id)) {
+      setSelectedId(id);
+      setHistoryOpen(false);
+    }
   }, []);
   // Mirror the current selection into the URL (replaceState → no history spam). A
   // selectedId with no matching conversation (e.g. a stale ?c=, or a just-created
@@ -1358,13 +1368,69 @@ export default function ChatPage() {
       data-content-padding="false"
       className="flex h-[calc(100svh-3rem)] min-w-0 flex-col overflow-hidden p-3 sm:p-4 md:h-[calc(100svh-4rem)] md:p-6"
     >
-      <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 grid-rows-[minmax(10rem,15rem)_minmax(0,1fr)] gap-3 md:grid-cols-[18rem_minmax(0,1fr)] md:grid-rows-[minmax(0,1fr)] md:gap-4">
-        {/* left: conversation list */}
+      <div
+        className={cn(
+          "grid min-h-0 min-w-0 flex-1 gap-3 md:gap-4",
+          historyOpen
+            ? "grid-cols-1 grid-rows-[minmax(10rem,15rem)_minmax(0,1fr)] md:grid-cols-[18rem_minmax(0,1fr)] md:grid-rows-[minmax(0,1fr)]"
+            : "grid-cols-1 grid-rows-[minmax(0,1fr)] md:grid-cols-[2.75rem_minmax(0,1fr)] md:grid-rows-[minmax(0,1fr)]",
+        )}
+      >
+        {/* left: history + agent filter (collapses when a conversation is open) */}
+        {!historyOpen ? (
+          <div className="bg-card hidden flex-col items-center gap-2 overflow-hidden rounded-lg border py-2 md:flex">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              title="Show history"
+              aria-label="Show history"
+              onClick={() => setHistoryOpen(true)}
+            >
+              <PanelLeftOpenIcon className="size-4" />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              title="New conversation"
+              aria-label="New conversation"
+              onClick={() => selectConversation(null)}
+            >
+              <PlusIcon className="size-4" />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              title="History"
+              aria-label="History"
+              onClick={() => setHistoryOpen(true)}
+            >
+              <HistoryIcon className="size-4" />
+            </Button>
+          </div>
+        ) : (
         <div className="bg-card flex flex-col overflow-hidden rounded-lg border">
           <div className="flex flex-col gap-2 border-b p-2">
-            <Button size="sm" className="w-full" onClick={() => selectConversation(null)}>
-              <PlusIcon /> New conversation
-            </Button>
+            <div className="flex items-center gap-1">
+              <Button size="sm" className="min-w-0 flex-1" onClick={() => selectConversation(null)}>
+                <PlusIcon /> New conversation
+              </Button>
+              {selectedId != null && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  className="shrink-0"
+                  title="Hide history — expand chat"
+                  aria-label="Hide history"
+                  onClick={() => setHistoryOpen(false)}
+                >
+                  <PanelLeftCloseIcon className="size-4" />
+                </Button>
+              )}
+            </div>
             <Select
               value={agentFilter === null ? "all" : `agent:${agentFilter}`}
               onValueChange={(value) => changeAgentFilter(value === "all" ? null : value.slice(6))}
@@ -1510,9 +1576,22 @@ export default function ChatPage() {
             </div>
           </ScrollArea>
         </div>
+        )}
 
-        {/* right: chat view */}
+        {/* right: chat view — full width when history is collapsed */}
         <div className="bg-card flex min-w-0 flex-col overflow-hidden rounded-lg border">
+          {!historyOpen && (
+            <div className="flex items-center gap-2 border-b px-2 py-1.5 md:hidden">
+              <Button type="button" variant="outline" size="sm" onClick={() => setHistoryOpen(true)}>
+                <HistoryIcon data-icon="inline-start" />
+                History
+              </Button>
+              <Button type="button" variant="ghost" size="sm" onClick={() => selectConversation(null)}>
+                <PlusIcon data-icon="inline-start" />
+                New
+              </Button>
+            </div>
+          )}
           {selected ? (
             <ChatView
               key={selected.id}

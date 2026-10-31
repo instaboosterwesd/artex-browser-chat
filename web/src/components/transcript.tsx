@@ -7,6 +7,7 @@ import {
   ChevronRight,
   CrosshairIcon,
   Flag,
+  FolderOpenIcon,
   MessageSquare,
   PaperclipIcon,
   ShieldAlertIcon,
@@ -15,6 +16,7 @@ import {
   Wrench,
   XIcon,
 } from "lucide-react";
+import Link from "next/link";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { Markdown } from "@/components/markdown";
@@ -22,6 +24,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ApprovalDetail } from "@/components/approval-records";
+import { extractToolPath, WORKSPACE_PATH_TOOLS, workspaceHref } from "@/lib/workspace-link";
 import type { Activity, InterceptPending } from "@/lib/types";
 
 // ---- per-agent lane color (planner + work#1/#2/#3 …) ---------------------------
@@ -382,8 +385,31 @@ function ToolBlock({
   const rawCmd =
     use && use.summary.startsWith(toolName) ? use.summary.slice(toolName.length).trimStart() : (use?.summary ?? "");
   const cmd = toolInputText(toolName, rawCmd);
+  const [resolvedPath, setResolvedPath] = React.useState<string | null>(null);
+  // Prefer path from summary; expand / lightweight prefetch fills JSON args.
+  const pathFromSummary = extractToolPath(toolName, cmd || rawCmd);
+  const pathFromDetail = detail ? extractToolPath(toolName, detail) : null;
+  const filePath = pathFromDetail || resolvedPath || pathFromSummary;
+  const openAsDir = toolName === "LS" || toolName === "Glob";
   // status only — the full result lives behind the expand ([Output]), not previewed inline
   const statusText = running ? "Running…" : ok ? "✓" : "✕ Failed";
+
+  // When the compact summary has no parseable path, fetch tool_use args once so the
+  // Workspace "File" button still appears without forcing the user to expand.
+  React.useEffect(() => {
+    if (!WORKSPACE_PATH_TOOLS.has(toolName) || pathFromSummary || !use) return;
+    let live = true;
+    getDetail(use.seq)
+      .then((d) => {
+        if (!live) return;
+        const p = extractToolPath(toolName, d);
+        if (p) setResolvedPath(p);
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [toolName, pathFromSummary, use, getDetail]);
 
   // key over the seqs we'd load; changes when the result (or command) arrives.
   const detailKey = `${use?.seq ?? ""}:${result?.seq ?? ""}`;
@@ -460,16 +486,33 @@ function ToolBlock({
       aria-label={focused ? `Focused tool call #${use?.seq}` : undefined}
       className={focused ? "rounded-lg border-2 border-primary bg-primary/5 p-3 text-xs" : "text-xs"}
     >
-      <button type="button" onClick={toggle} className="flex w-full items-start gap-2 py-1 text-left hover:bg-muted/40">
-        <span className="mt-0.5 text-muted-foreground">
-          {open ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
-        </span>
-        <ToolIcon className={"mt-0.5 size-3.5 shrink-0 " + (running ? "text-sky-600 dark:text-sky-400" : statusTone)} />
-        {showWorker && <span className={chip(group.worker)}>{group.worker}</span>}
-        <span className="shrink-0 font-medium text-sky-600 dark:text-sky-400">{toolName}</span>
-        {cmd && <span className="min-w-0 flex-1 truncate font-mono text-muted-foreground">{cmd}</span>}
-        <span className={"ml-auto shrink-0 font-medium " + statusTone}>{statusText}</span>
-      </button>
+      <div className="flex w-full items-start gap-1">
+        <button type="button" onClick={toggle} className="flex min-w-0 flex-1 items-start gap-2 py-1 text-left hover:bg-muted/40">
+          <span className="mt-0.5 text-muted-foreground">
+            {open ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
+          </span>
+          <ToolIcon className={"mt-0.5 size-3.5 shrink-0 " + (running ? "text-sky-600 dark:text-sky-400" : statusTone)} />
+          {showWorker && <span className={chip(group.worker)}>{group.worker}</span>}
+          <span className="shrink-0 font-medium text-sky-600 dark:text-sky-400">{toolName}</span>
+          {cmd && <span className="min-w-0 flex-1 truncate font-mono text-muted-foreground">{cmd}</span>}
+          <span className={"ml-auto shrink-0 font-medium " + statusTone}>{statusText}</span>
+        </button>
+        {WORKSPACE_PATH_TOOLS.has(toolName) && filePath && (
+          <Button
+            asChild
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="mt-0.5 h-7 shrink-0 gap-1 px-2 text-[11px]"
+            title={`Open ${filePath} in Workspace`}
+          >
+            <Link href={workspaceHref(filePath, openAsDir)} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
+              <FolderOpenIcon className="size-3.5" />
+              File
+            </Link>
+          </Button>
+        )}
+      </div>
       {open && (
         <pre className="ml-7 mb-1 max-h-72 overflow-auto whitespace-pre-wrap break-all rounded bg-muted/50 p-2 font-mono text-[11px] leading-relaxed">
           {detail ?? "Loading…"}
@@ -615,6 +658,17 @@ function UserRow({ step, intent, getDetail }: { step: Activity; intent?: boolean
                 <PaperclipIcon className="size-3 shrink-0 text-primary" />
                 <span className="max-w-[180px] truncate font-medium">{a.name}</span>
                 <span className="shrink-0 text-muted-foreground">{fmtBytes(a.size)}</span>
+                {a.path && (
+                  <Link
+                    href={workspaceHref(a.path)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-muted-foreground hover:text-foreground inline-flex items-center gap-0.5"
+                    title="Open in Workspace"
+                  >
+                    <FolderOpenIcon className="size-3" />
+                  </Link>
+                )}
               </div>
             ))}
           </div>

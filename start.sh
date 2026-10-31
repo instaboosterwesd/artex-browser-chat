@@ -14,6 +14,12 @@ set -u
 
 cd "$(dirname "$0")" || exit 1
 
+if [ -f .env ]; then
+	set -a
+	. ./.env
+	set +a
+fi
+
 BIN=./artex
 [ -x "$BIN" ] || { echo "[artex] executable $BIN not found" >&2; exit 1; }
 

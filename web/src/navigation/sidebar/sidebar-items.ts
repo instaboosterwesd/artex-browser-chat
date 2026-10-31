@@ -11,6 +11,7 @@ import {
   LayoutDashboard,
   type LucideIcon,
   MessageSquare,
+  MonitorPlay,
   Network,
   Plug,
   Radio,
@@ -68,6 +69,7 @@ export const sidebarItems: NavGroup[] = [
     items: [
       { id: "dashboard", title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
       { id: "chat", title: "Chat", url: "/chat", icon: MessageSquare },
+      { id: "browser", title: "Live Browser", url: "/function/browser", icon: MonitorPlay },
       { id: "tasks", title: "Tasks", url: "/function/tasks", icon: Target },
       { id: "findings", title: "Findings", url: "/function/findings", icon: Bug },
       { id: "traffic", title: "Traffic", url: "/function/traffic", icon: Activity },

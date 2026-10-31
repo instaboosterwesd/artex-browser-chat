@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { ChatBrowserDock } from "@/components/chat-browser-panel";
 import { MentionTextarea } from "@/components/mention-textarea";
 import { SideQuestionButton, SideQuestionWorkspace } from "@/components/side-question-workspace";
 import { TodoPopover } from "@/components/todo-popover";
@@ -464,6 +465,7 @@ function DraftChat({
         onPickFiles={pickFiles}
         uploading={uploading}
       />
+      <ChatBrowserDock chatId={null} />
       <LLMProfileRow
         profiles={profiles}
         selected={llmProfileId}
@@ -825,6 +827,7 @@ function ChatView({
         onRemoveAttachment={(path) => setAttachments((p) => p.filter((x) => x.path !== path))}
         uploading={uploading}
       />
+      <ChatBrowserDock chatId={conv.id} />
       <LLMProfileRow
         profiles={profiles}
         selected={currentProfileId}

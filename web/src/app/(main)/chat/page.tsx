@@ -426,7 +426,7 @@ function DraftChat({
 
   const agentPicker = (
     <Select value={agentKey} onValueChange={setAgentKey}>
-      <SelectTrigger className="w-full sm:w-40">
+      <SelectTrigger className="w-full max-w-xs sm:w-52">
         <SelectValue placeholder="Select an agent…" />
       </SelectTrigger>
       <SelectContent>
@@ -451,13 +451,14 @@ function DraftChat({
 
   return (
     <>
-      {/* empty / landing state fills the panel */}
-      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-4 text-center">
+      {/* empty / landing state — agent picker centered in the middle */}
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-4 text-center">
         <div className="bg-primary/10 flex size-12 items-center justify-center rounded-full">
           <Bot className="text-primary size-6" />
         </div>
         <div className="text-sm font-medium">Start a conversation with "{agent?.name ?? "Agent"}"</div>
         {agent?.description && <p className="text-muted-foreground max-w-md text-xs">{agent.description}</p>}
+        <div className="mt-1 w-full max-w-xs">{agentPicker}</div>
       </div>
 
       <Composer
@@ -466,7 +467,6 @@ function DraftChat({
         onSend={send}
         disabled={sending || uploading || !agentKey}
         placeholder="Type a message, @ to reference records, Enter to send"
-        leftSlot={agentPicker}
         onPickFiles={pickFiles}
         uploading={uploading}
       />
@@ -1370,79 +1370,85 @@ export default function ChatPage() {
       {/* One pane at a time: history list, or full-width chat (never side-by-side). */}
       {historyOpen ? (
         <div className="bg-card flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border">
-          <div className="flex flex-col gap-2 border-b p-2 sm:flex-row sm:items-center">
-            <Button size="sm" className="w-full sm:w-auto" onClick={() => selectConversation(null)}>
-              <PlusIcon /> New conversation
-            </Button>
-            <Select
-              value={agentFilter === null ? "all" : `agent:${agentFilter}`}
-              onValueChange={(value) => changeAgentFilter(value === "all" ? null : value.slice(6))}
-              disabled={bulkDeleting}
-            >
-              <SelectTrigger size="sm" className="w-full min-w-0 sm:max-w-xs" aria-label="Filter conversations by agent">
-                <Bot />
-                <SelectValue placeholder="All agents" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  <SelectItem value="all">All agents</SelectItem>
-                  {agentFilterOptions.map((agent) => (
-                    <SelectItem key={agent.key} value={`agent:${agent.key}`}>
-                      {agent.name} ({agent.count})
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-            {selectedId != null && (
-              <Button type="button" size="sm" variant="outline" className="sm:ml-auto" onClick={() => setHistoryOpen(false)}>
-                Back to chat
-              </Button>
-            )}
-            {convs.length > 0 &&
-              (selectionMode ? (
-                <div className="flex min-w-0 flex-1 items-center gap-2 px-1 sm:justify-end">
-                  <Checkbox
-                    checked={conversationHeaderChecked}
-                    onCheckedChange={(checked) => toggleAllConversations(checked === true)}
-                    aria-label="Select all conversations matching the current filter"
-                    disabled={filteredConversations.length === 0 || bulkDeleting}
-                  />
-                  <span className="text-muted-foreground min-w-0 flex-1 text-xs tabular-nums sm:flex-none">
-                    {selectedConversationCount > 0 ? `${selectedConversationCount} selected` : conversationCountLabel}
-                  </span>
-                  {selectedConversationCount > 0 && (
+          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 border-b p-2">
+            <div className="flex min-w-0 items-center gap-2 justify-self-start">
+              {selectedId != null && (
+                <Button type="button" size="sm" variant="outline" onClick={() => setHistoryOpen(false)}>
+                  Back to chat
+                </Button>
+              )}
+              {convs.length > 0 &&
+                (selectionMode ? (
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Checkbox
+                      checked={conversationHeaderChecked}
+                      onCheckedChange={(checked) => toggleAllConversations(checked === true)}
+                      aria-label="Select all conversations matching the current filter"
+                      disabled={filteredConversations.length === 0 || bulkDeleting}
+                    />
+                    <span className="text-muted-foreground hidden min-w-0 text-xs tabular-nums sm:inline">
+                      {selectedConversationCount > 0 ? `${selectedConversationCount} selected` : conversationCountLabel}
+                    </span>
+                    {selectedConversationCount > 0 && (
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        disabled={bulkDeleting}
+                        onClick={() => setBulkDeleteOpen(true)}
+                      >
+                        <Trash2Icon data-icon="inline-start" />
+                        Delete
+                      </Button>
+                    )}
+                    <Button size="sm" variant="ghost" onClick={exitSelectionMode}>
+                      Done
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="text-muted-foreground hidden text-xs tabular-nums sm:inline">
+                      {conversationCountLabel}
+                    </span>
                     <Button
                       size="sm"
-                      variant="destructive"
-                      disabled={bulkDeleting}
-                      onClick={() => setBulkDeleteOpen(true)}
+                      variant="ghost"
+                      className="text-muted-foreground"
+                      onClick={() => setSelectionMode(true)}
+                      disabled={filteredConversations.length === 0}
                     >
-                      <Trash2Icon data-icon="inline-start" />
-                      Delete
+                      <ListChecksIcon data-icon="inline-start" />
+                      Select
                     </Button>
-                  )}
-                  <Button size="sm" variant="ghost" onClick={exitSelectionMode}>
-                    Done
-                  </Button>
-                </div>
-              ) : (
-                <div className="flex min-w-0 items-center gap-2 px-1 sm:ml-auto">
-                  <span className="text-muted-foreground min-w-0 text-xs tabular-nums">
-                    {conversationCountLabel}
-                  </span>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="text-muted-foreground"
-                    onClick={() => setSelectionMode(true)}
-                    disabled={filteredConversations.length === 0}
-                  >
-                    <ListChecksIcon data-icon="inline-start" />
-                    Select
-                  </Button>
-                </div>
-              ))}
+                  </div>
+                ))}
+            </div>
+            <div className="justify-self-center">
+              <Select
+                value={agentFilter === null ? "all" : `agent:${agentFilter}`}
+                onValueChange={(value) => changeAgentFilter(value === "all" ? null : value.slice(6))}
+                disabled={bulkDeleting}
+              >
+                <SelectTrigger size="sm" className="w-[11rem] min-w-0 sm:w-52" aria-label="Filter conversations by agent">
+                  <Bot />
+                  <SelectValue placeholder="All agents" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="all">All agents</SelectItem>
+                    {agentFilterOptions.map((agent) => (
+                      <SelectItem key={agent.key} value={`agent:${agent.key}`}>
+                        {agent.name} ({agent.count})
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="justify-self-end">
+              <Button size="sm" onClick={() => selectConversation(null)}>
+                <PlusIcon /> New conversation
+              </Button>
+            </div>
           </div>
           <ScrollArea
             key={agentFilter === null ? "all" : `agent:${agentFilter}`}
@@ -1526,15 +1532,22 @@ export default function ChatPage() {
         </div>
       ) : (
         <div className="bg-card flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border">
-          <div className="flex items-center gap-2 border-b px-2 py-1.5">
-            <Button type="button" variant="outline" size="sm" onClick={openHistory}>
-              <HistoryIcon data-icon="inline-start" />
-              History
-            </Button>
-            <Button type="button" variant="ghost" size="sm" onClick={() => selectConversation(null)}>
-              <PlusIcon data-icon="inline-start" />
-              New
-            </Button>
+          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 border-b px-2 py-1.5">
+            <div className="justify-self-start">
+              <Button type="button" variant="outline" size="sm" onClick={openHistory}>
+                <HistoryIcon data-icon="inline-start" />
+                History
+              </Button>
+            </div>
+            <div className="text-muted-foreground justify-self-center text-xs font-medium">
+              {selected ? (agentByKey.get(selected.agent_key)?.name ?? selected.agent_key) : "New conversation"}
+            </div>
+            <div className="justify-self-end">
+              <Button type="button" size="sm" onClick={() => selectConversation(null)}>
+                <PlusIcon data-icon="inline-start" />
+                New conversation
+              </Button>
+            </div>
           </div>
           {selected ? (
             <ChatView
